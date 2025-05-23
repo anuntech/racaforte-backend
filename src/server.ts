@@ -1,0 +1,22 @@
+import Fastify from 'fastify';
+import cors from '@fastify/cors';
+import { config } from 'dotenv';
+import { healthRoutes } from './routes/health';
+
+config();
+
+const app = Fastify({
+  logger: true,
+});
+
+app.register(cors, { origin: '*' });
+
+app.register(healthRoutes); // 🔥 Register the route here
+
+app.listen({ port: 3333 }, (err, address) => {
+  if (err) {
+    app.log.error(err);
+    process.exit(1);
+  }
+  console.log(`🚀 Server listening at ${address}`);
+});

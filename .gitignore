@@ -1,0 +1,19 @@
+# Node
+node_modules
+dist
+.env
+.env.*.local
+
+# Prisma
+prisma/dev.db
+prisma/dev.db-journal
+
+# Logs
+*.log
+
+# TS
+*.tsbuildinfo
+
+# OS
+.DS_Store
+Thumbs.db
