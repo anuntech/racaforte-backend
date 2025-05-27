@@ -1,0 +1,29 @@
+version: "3.9"
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: raca_forte_db_container
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: racaforte_db
+      MYSQL_USER: racaforte_user
+      MYSQL_PASSWORD: racaforte_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - racaforte_mysql_data:/var/lib/mysql
+    networks:
+      - raca_forte_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  racaforte_mysql_data:
+
+networks:
+  raca_forte_network:
+    driver: bridge
