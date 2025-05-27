@@ -154,9 +154,3 @@ npm run format
 - 🐳 [Documentação do Docker](https://docs.docker.com/)
 - 🔧 [Documentação do Biome](https://biomejs.dev/)
 - ☁️ [Documentação AWS S3](https://docs.aws.amazon.com/AmazonS3/)
-
----
-
-## 🏆 Autor
-
-**Equipe de Desenvolvimento Raca Forte**
