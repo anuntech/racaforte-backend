@@ -14,9 +14,26 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        Int      @id @default(autoincrement())
-  name      String
-  email     String   @unique
-  createdAt DateTime @default(now())
+enum PartCondition {
+  BOA
+  MEDIA
+  RUIM
+}
+
+model Part {
+  id               String        @id @default(uuid())
+  name             String        @db.Text
+  brand            String        @db.Text
+  year             Int
+  condition        PartCondition
+  stock_address    String        @db.Text
+  dimensions       Json          @db.Json
+  weight           Decimal?      @db.Decimal(5, 2)
+  compatibility    Json?         @db.Json
+  min_price        Decimal?      @db.Decimal(10, 2)
+  suggested_price  Decimal?      @db.Decimal(10, 2)
+  max_price        Decimal?      @db.Decimal(10, 2)
+  part_description String?       @db.Text
+  images           Json          @db.Json
+  created_at       DateTime      @default(now())
 }
