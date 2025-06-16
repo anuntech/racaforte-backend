@@ -1,8 +1,7 @@
 import type { FastifyInstance } from 'fastify';
-import { ImageController } from '../controllers/image.controller';
+import * as imageController from '../controllers/image.controller';
 
 export async function imageRoutes(app: FastifyInstance) {
-  const imageController = new ImageController();
 
   // Register multipart support for this route
   await app.register(import('@fastify/multipart'), {
@@ -45,5 +44,5 @@ export async function imageRoutes(app: FastifyInstance) {
         }
       }
     }
-  }, imageController.uploadImages.bind(imageController));
+  }, imageController.uploadImages);
 } 
