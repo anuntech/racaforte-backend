@@ -50,7 +50,7 @@ export class ImageController {
       });
       
       for (const file of files) {
-        // Verificação do tipo de arquivo - agora inclui WEBP
+        // Verificação do tipo de arquivo
         const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
         if (!allowedTypes.includes(file.mimetype)) {
           return reply.status(400).send({

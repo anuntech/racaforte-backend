@@ -5,7 +5,7 @@ const prisma = new PrismaClient()
 async function main() {
   console.log('🌱 Iniciando seeding do banco de dados...')
 
-  // Limpar dados existentes (opcional)
+  // Limpar dados existentes
   await prisma.part.deleteMany()
   console.log('🗑️  Dados existentes removidos')
 

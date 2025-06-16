@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
   output   = "../generated/prisma"
@@ -20,20 +14,39 @@ enum PartCondition {
   RUIM
 }
 
+model Car {
+  id          String   @id @default(uuid())
+  internal_id String   @unique
+  brand       String
+  model       String
+  year        Int
+  color       String
+  part        Part[]
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  @@map("cars")
+}
+
 model Part {
-  id               String        @id @default(uuid())
-  name             String        @db.Text
-  brand            String        @db.Text
-  year             Int
+  id               String         @id @default(uuid())
+  name             String         @db.Text
+  description      String         @db.Text
   condition        PartCondition
-  stock_address    String        @db.Text
-  dimensions       Json          @db.Json
-  weight           Decimal?      @db.Decimal(5, 2)
-  compatibility    Json?         @db.Json
-  min_price        Decimal?      @db.Decimal(10, 2)
-  suggested_price  Decimal?      @db.Decimal(10, 2)
-  max_price        Decimal?      @db.Decimal(10, 2)
-  part_description String?       @db.Text
-  images           Json          @db.Json
-  created_at       DateTime      @default(now())
+  stock_address    String
+  dimensions       Json?
+  weight           Decimal?       @db.Decimal(5, 2)
+  compatibility    Json?
+  min_price        Decimal?       @db.Decimal(10, 2)
+  suggested_price  Decimal?       @db.Decimal(10, 2)
+  max_price        Decimal?       @db.Decimal(10, 2)
+  ad_title         String?        @db.Text
+  ad_description   String?        @db.Text
+  images           Json
+  created_at       DateTime       @default(now())
+  updated_at       DateTime       @updatedAt
+  car_id           String
+  car              Car            @relation(fields: [car_id], references: [id])
+
+  @@map("parts")
 }

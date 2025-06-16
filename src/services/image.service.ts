@@ -270,25 +270,6 @@ IMPORTANTE:
           };
         }
 
-        // Verifica respostas vagas
-        const vaguePhrases = [
-          "não encontrei",
-          "não consigo identificar",
-          "não é possível",
-          "imagem não está clara",
-          "não tenho certeza"
-        ];
-
-        const responseText = `${parsedResponse.partName} ${parsedResponse.description}`.toLowerCase();
-        const hasVaguePhrase = vaguePhrases.some(phrase => responseText.includes(phrase));
-
-        if (hasVaguePhrase) {
-          return {
-            error: "vague_response",
-            message: "Não foi possível identificar a peça com precisão suficiente. Por favor, insira os dados manualmente."
-          };
-        }
-
         return {
           partName: parsedResponse.partName,
           description: parsedResponse.description
