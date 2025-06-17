@@ -1,7 +1,7 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import * as carService from '../services/car.service';
-import type { CreateCarRequest, UpdateCarRequest, CarParams, CarResponse, CarDetailsResponse, DeleteResponse, InternalIdsResponse, AllCarsResponse } from '../schemas/car.schema';
-import { CreateCarSchema, UpdateCarSchema, CarParamsSchema } from '../schemas/car.schema';
+import type { CreateCarRequest, UpdateCarRequest, CarParams, CarResponse, CarDetailsResponse, DeleteResponse, InternalIdsResponse, AllCarsResponse, GenerateInternalIdRequest, GenerateInternalIdResponse } from '../schemas/car.schema';
+import { CreateCarSchema, UpdateCarSchema, CarParamsSchema, GenerateInternalIdSchema } from '../schemas/car.schema';
 
 export async function createCar(request: FastifyRequest, reply: FastifyReply): Promise<CarResponse> {
   try {
@@ -311,6 +311,59 @@ export async function getAllCars(request: FastifyRequest, reply: FastifyReply): 
 
   } catch (error) {
     console.error('Erro no controller getAllCars:', error);
+    
+    return reply.status(500).send({
+      success: false,
+      error: {
+        type: 'server_error',
+        message: 'Erro interno do servidor. Tente novamente.'
+      }
+    });
+  }
+}
+
+export async function generateInternalId(request: FastifyRequest, reply: FastifyReply): Promise<GenerateInternalIdResponse> {
+  try {
+    // Valida os dados de entrada
+    const validationResult = GenerateInternalIdSchema.safeParse(request.body);
+    
+    if (!validationResult.success) {
+      const firstError = validationResult.error.errors[0];
+      return reply.status(400).send({
+        success: false,
+        error: {
+          type: 'validation_error',
+          message: firstError.message
+        }
+      });
+    }
+
+    const carData: GenerateInternalIdRequest = validationResult.data;
+
+    // Chama o service para gerar o internal_id
+    const result = await carService.generateInternalIdFromData(carData);
+
+    // Verifica se houve erro no service
+    if (typeof result === 'object' && 'error' in result) {
+      return reply.status(500).send({
+        success: false,
+        error: {
+          type: result.error,
+          message: result.message
+        }
+      });
+    }
+
+    // Resposta de sucesso
+    return reply.status(200).send({
+      success: true,
+      data: {
+        internal_id: result
+      }
+    });
+
+  } catch (error) {
+    console.error('Erro no controller generateInternalId:', error);
     
     return reply.status(500).send({
       success: false,

@@ -5,6 +5,7 @@ export const CreateCarSchema = z.object({
   model: z.string().min(1, 'Modelo é obrigatório').trim(),
   year: z.number().int().min(1900, 'Ano deve ser maior que 1900').max(new Date().getFullYear() + 1, 'Ano não pode ser no futuro'),
   color: z.string().min(1, 'Cor é obrigatória').trim(),
+  internal_id: z.string().min(1, 'Internal ID é obrigatório').trim(),
 });
 
 export const UpdateCarSchema = z.object({
@@ -85,6 +86,24 @@ export const AllCarsResponseSchema = z.object({
   }).optional(),
 });
 
+export const GenerateInternalIdSchema = z.object({
+  brand: z.string().min(1, 'Marca é obrigatória').trim(),
+  model: z.string().min(1, 'Modelo é obrigatório').trim(),
+  year: z.number().int().min(1900, 'Ano deve ser maior que 1900').max(new Date().getFullYear() + 1, 'Ano não pode ser no futuro'),
+  color: z.string().min(1, 'Cor é obrigatória').trim(),
+});
+
+export const GenerateInternalIdResponseSchema = z.object({
+  success: z.boolean(),
+  data: z.object({
+    internal_id: z.string(),
+  }).optional(),
+  error: z.object({
+    type: z.string(),
+    message: z.string(),
+  }).optional(),
+});
+
 export type CreateCarRequest = z.infer<typeof CreateCarSchema>;
 export type UpdateCarRequest = z.infer<typeof UpdateCarSchema>;
 export type CarParams = z.infer<typeof CarParamsSchema>;
@@ -92,4 +111,6 @@ export type CarResponse = z.infer<typeof CarResponseSchema>;
 export type CarDetailsResponse = z.infer<typeof CarDetailsResponseSchema>;
 export type DeleteResponse = z.infer<typeof DeleteResponseSchema>;
 export type InternalIdsResponse = z.infer<typeof InternalIdsResponseSchema>;
-export type AllCarsResponse = z.infer<typeof AllCarsResponseSchema>; 
+export type AllCarsResponse = z.infer<typeof AllCarsResponseSchema>;
+export type GenerateInternalIdRequest = z.infer<typeof GenerateInternalIdSchema>;
+export type GenerateInternalIdResponse = z.infer<typeof GenerateInternalIdResponseSchema>; 

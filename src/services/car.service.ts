@@ -121,9 +121,8 @@ async function generateInternalId(brand: string, model: string, year: number, co
   return `${baseInternalId}${sequence}`;
 }
 
-export async function createCar(carData: CreateCarRequest): Promise<CarCreationResult | ServiceError> {
+export async function generateInternalIdFromData(carData: { brand: string; model: string; year: number; color: string }): Promise<string | ServiceError> {
   try {
-    // Gera o ID interno único
     const internal_id = await generateInternalId(
       carData.brand,
       carData.model,
@@ -131,14 +130,28 @@ export async function createCar(carData: CreateCarRequest): Promise<CarCreationR
       carData.color
     );
 
-    // Cria o carro no banco de dados
+    return internal_id;
+
+  } catch (error) {
+    console.error('Erro ao gerar internal_id:', error);
+    
+    return {
+      error: 'generation_error',
+      message: 'Erro interno ao gerar identificador. Tente novamente.'
+    };
+  }
+}
+
+export async function createCar(carData: CreateCarRequest): Promise<CarCreationResult | ServiceError> {
+  try {
+    // Cria o carro no banco de dados usando o internal_id fornecido
     const car = await prisma.car.create({
       data: {
         brand: carData.brand,
         model: carData.model,
         year: carData.year,
         color: carData.color,
-        internal_id: internal_id,
+        internal_id: carData.internal_id,
       },
       select: {
         id: true,
@@ -158,7 +171,7 @@ export async function createCar(carData: CreateCarRequest): Promise<CarCreationR
     if (error instanceof Error && error.message.includes('internal_id')) {
       return {
         error: 'duplicate_internal_id',
-        message: 'Erro interno ao gerar identificador único. Tente novamente.'
+        message: 'Internal ID já existe. Use um identificador único.'
       };
     }
 

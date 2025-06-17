@@ -3,9 +3,9 @@ import * as carController from '../controllers/car.controller';
 
 export async function carRoutes(app: FastifyInstance) {
 
-  app.post('/car', {
+  app.post('/car/generate-internal-id', {
     schema: {
-      description: 'Criar um novo veículo no banco de dados',
+      description: 'Gerar internal_id baseado nas informações do veículo',
       tags: ['Car Management'],
       body: {
         type: 'object',
@@ -30,6 +30,88 @@ export async function carRoutes(app: FastifyInstance) {
           color: {
             type: 'string',
             description: 'Cor do veículo',
+            minLength: 1
+          }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                internal_id: { 
+                  type: 'string',
+                  description: 'ID interno gerado automaticamente'
+                }
+              }
+            }
+          }
+        },
+        400: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                type: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                type: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, carController.generateInternalId);
+
+  app.post('/car', {
+    schema: {
+      description: 'Criar um novo veículo no banco de dados',
+      tags: ['Car Management'],
+      body: {
+        type: 'object',
+        required: ['brand', 'model', 'year', 'color', 'internal_id'],
+        properties: {
+          brand: {
+            type: 'string',
+            description: 'Marca do veículo',
+            minLength: 1
+          },
+          model: {
+            type: 'string',
+            description: 'Modelo do veículo',
+            minLength: 1
+          },
+          year: {
+            type: 'integer',
+            description: 'Ano do veículo',
+            minimum: 1900,
+            maximum: new Date().getFullYear() + 1
+          },
+          color: {
+            type: 'string',
+            description: 'Cor do veículo',
+            minLength: 1
+          },
+          internal_id: {
+            type: 'string',
+            description: 'ID interno único do veículo',
             minLength: 1
           }
         }
