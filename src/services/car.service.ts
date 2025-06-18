@@ -84,22 +84,11 @@ function generateColorAbbreviation(color: string): string {
 }
 
 async function generateSequence(): Promise<string> {
-  // Busca o último carro criado para obter a próxima sequência global
-
-  const lastCar = await prisma.car.findFirst({
-    orderBy: {
-      created_at: 'desc'
-    }
-  });
-
-  if (!lastCar) {
-    return '001';
-  }
-
-  // Extrai a sequência do último internal_id (últimos 3 dígitos)
-  const lastSequence = lastCar.internal_id.slice(-3);
-  const sequenceNumber = Number.parseInt(lastSequence) || 0;
-  const nextSequence = sequenceNumber + 1;
+  // Conta todos os carros no banco de dados para obter a próxima sequência
+  const carCount = await prisma.car.count();
+  
+  // Adiciona 1 ao total de carros para gerar a próxima sequência
+  const nextSequence = carCount + 1;
 
   // Formata com 3 dígitos (001, 002, etc.)
   return nextSequence.toString().padStart(3, '0');
