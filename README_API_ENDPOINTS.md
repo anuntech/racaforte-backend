@@ -270,7 +270,8 @@ POST /car
 - Todos os endpoints retornam JSON
 - O `identifier` pode ser tanto o `id` UUID quanto o `internal_id` 
 - O `internal_id` é gerado automaticamente no formato: `[MARCA][MODELO][ANO][COR][SEQUÊNCIA]`
-- Exemplo: `TOYCOR2023PT001` = Toyota Corolla 2023 Prata #001
+- Exemplo: `TOYCOR2023PT001` = Toyota Corolla 2023 Prata sequência global #001
+- A sequência é incrementada globalmente para cada carro criado, independente da combinação marca/modelo/ano/cor
 - Campos obrigatórios para criação: `brand`, `model`, `year`, `color`, `internal_id`
 - Para atualização, pelo menos um campo deve ser fornecido (exceto internal_id)
 - O ano deve estar entre 1900 e o próximo ano

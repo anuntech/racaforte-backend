@@ -83,17 +83,12 @@ function generateColorAbbreviation(color: string): string {
   return colorMap[normalizedColor] || color.substring(0, 2).toUpperCase();
 }
 
-async function generateSequence(baseInternalId: string): Promise<string> {
-  // Busca o último carro com o mesmo padrão de marca, modelo e cor
+async function generateSequence(): Promise<string> {
+  // Busca o último carro criado para obter a próxima sequência global
 
   const lastCar = await prisma.car.findFirst({
-    where: {
-      internal_id: {
-        startsWith: baseInternalId
-      }
-    },
     orderBy: {
-      internal_id: 'desc'
+      created_at: 'desc'
     }
   });
 
@@ -101,8 +96,8 @@ async function generateSequence(baseInternalId: string): Promise<string> {
     return '001';
   }
 
-  // Extrai a sequência do último internal_id
-  const lastSequence = lastCar.internal_id.slice(baseInternalId.length);
+  // Extrai a sequência do último internal_id (últimos 3 dígitos)
+  const lastSequence = lastCar.internal_id.slice(-3);
   const sequenceNumber = Number.parseInt(lastSequence) || 0;
   const nextSequence = sequenceNumber + 1;
 
@@ -116,7 +111,7 @@ async function generateInternalId(brand: string, model: string, year: number, co
   const colorAbbr = generateColorAbbreviation(color);
   
   const baseInternalId = `${brandAbbr}${modelAbbr}${year}${colorAbbr}`;
-  const sequence = await generateSequence(baseInternalId);
+  const sequence = await generateSequence();
   
   return `${baseInternalId}${sequence}`;
 }
