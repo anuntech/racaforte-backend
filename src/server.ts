@@ -17,10 +17,14 @@ app.register(healthRoutes); // 🔥 Register the route here
 app.register(imageRoutes); // 🔥 Register image upload routes
 app.register(carRoutes); // 🔥 Register car routes
 
-app.listen({ port: 3333 }, (err, address) => {
+const host = process.env.HOST || '0.0.0.0';
+const port = Number(process.env.PORT) || 3333;
+
+app.listen({ port, host }, (err, address) => {
   if (err) {
     app.log.error(err);
     process.exit(1);
   }
   console.log(`🚀 Server listening at ${address}`);
+  console.log(`📱 Para acessar do celular use: http://[SEU_IP]:${port}`);
 });

@@ -35,7 +35,8 @@ DATABASE_URL="mysql://racaforte_user:racaforte_password@localhost:3306/racaforte
 # OpenAI
 OPENAI_API_KEY=sk-sua-chave-da-openai
 
-# Server
+# Server Configuration
+HOST=0.0.0.0
 PORT=3333
 NODE_ENV=development
 
@@ -45,6 +46,25 @@ HETZNER_SECRET_KEY=
 MERCADOLIVRE_API_KEY=
 REMOVEBG_API_KEY=
 ```
+
+### 📱 Acessando do Celular:
+Para tornar o backend acessível do seu celular:
+
+1. **HOST**: Defina como `0.0.0.0` (permite conexões externas)
+2. **PORT**: Defina a porta desejada (padrão: 3333)
+3. **IP do seu computador**: Descubra o IP local da sua máquina:
+   ```bash
+   # Linux/Mac:
+   ip route get 1 | awk '{print $7}' | head -1
+   # ou
+   hostname -I | awk '{print $1}'
+   
+   # Windows:
+   ipconfig | findstr IPv4
+   ```
+4. **Acesse do celular**: `http://[SEU_IP]:3333`
+
+**Exemplo**: Se seu IP for `192.168.1.100`, acesse `http://192.168.1.100:3333`
 
 ---
 
