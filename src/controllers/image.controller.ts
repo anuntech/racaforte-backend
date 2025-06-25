@@ -2,17 +2,19 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 import type { MultipartFile } from '@fastify/multipart';
 import * as imageService from '../services/image.service';
 import type { ProcessedImageResponse } from '../schemas/image.schema';
+import { readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 
 export async function uploadImages(request: FastifyRequest, reply: FastifyReply): Promise<ProcessedImageResponse> {
   try {
-    // Coleta todos os arquivos enviados via multipart
-    const files: MultipartFile[] = [];
-    
-    for await (const part of request.parts()) {
-      if (part.type === 'file') {
-        files.push(part);
+    // Usa saveRequestFiles para melhor compatibilidade com iOS
+    const files = await request.saveRequestFiles({
+      tmpdir: tmpdir(), // Usa diretório temporário do sistema
+      limits: {
+        fileSize: 52428800, // 50MB
+        files: 5 // Máximo 5 arquivos
       }
-    }
+    });
 
     if (files.length === 0) {
       return reply.status(400).send({
@@ -55,8 +57,8 @@ export async function uploadImages(request: FastifyRequest, reply: FastifyReply)
         });
       }
 
-      // Converte o stream do arquivo para buffer
-      const buffer = await file.toBuffer();
+      // Lê o arquivo do disco
+      const buffer = await readFile(file.filepath);
       console.log(`📏 Arquivo ${file.filename}: ${buffer.length} bytes`);
       
       // Validação de tamanho (50MB)

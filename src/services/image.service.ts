@@ -200,8 +200,20 @@ IMPORTANTE:
       };
     }
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Erro da API OpenAI:', error);
+    
+    // Verifica se é erro de rate limit
+    if (error && typeof error === 'object' && 'status' in error && error.status === 429) {
+      const errorObj = error as { headers?: { 'retry-after'?: string } };
+      const retryAfter = errorObj.headers?.['retry-after'];
+      const retryMessage = retryAfter ? ` Tente novamente em ${Math.ceil(Number(retryAfter) / 60)} minutos.` : '';
+      return {
+        error: "rate_limit",
+        message: `Limite de uso da API excedido.${retryMessage} Tente novamente mais tarde ou insira os dados manualmente.`
+      };
+    }
+    
     return {
       error: "api_error",
       message: "Erro de conexão com a API. Tente novamente ou insira os dados manualmente."

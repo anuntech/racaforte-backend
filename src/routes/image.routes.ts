@@ -7,7 +7,9 @@ export async function imageRoutes(app: FastifyInstance) {
   await app.register(import('@fastify/multipart'), {
     limits: {
       fileSize: 52428800, // 50MB
-    }
+      files: 5, // Máximo 5 arquivos
+    },
+    attachFieldsToBody: false, // Importante para saveRequestFiles
   });
 
   app.post('/upload-images', {
