@@ -1,7 +1,7 @@
 import { PrismaClient } from '../../generated/prisma';
-import type { CreatePartRequest } from '../schemas/part.schema';
+import type { CreatePartRequest, UpdatePartRequest } from '../schemas/part.schema';
 import type { UploadResult, StorageError } from './storage.service';
-import { processAndUploadMultipleImages } from './storage.service';
+import { processAndUploadMultipleImages, deleteMultipleImagesFromS3 } from './storage.service';
 import { generatePartQRCode } from './qrcode.service';
 import type { QRCodeResult, QRCodeError } from './qrcode.service';
 
@@ -259,6 +259,216 @@ export async function getAllParts(): Promise<PartDetailsResult[] | ServiceError>
 
   } catch (error) {
     console.error('Erro ao buscar todas as peças:', error);
+    return {
+      error: 'database_error',
+      message: 'Erro interno do servidor. Tente novamente.'
+    };
+  }
+}
+
+/**
+ * Atualiza uma peça no banco de dados
+ */
+export async function updatePart(
+  partId: string,
+  partData: UpdatePartRequest,
+  images?: Array<{ buffer: Buffer; filename: string }>
+): Promise<PartDetailsResult | ServiceError> {
+  try {
+    // Verifica se a peça existe
+    const existingPart = await prisma.part.findUnique({
+      where: { id: partId },
+      include: {
+        car: {
+          select: {
+            id: true,
+            internal_id: true,
+            brand: true,
+            model: true,
+            year: true,
+            color: true,
+          }
+        }
+      }
+    });
+
+    if (!existingPart) {
+      return {
+        error: 'part_not_found',
+        message: 'Peça não encontrada.'
+      };
+    }
+
+    // Se car_id foi fornecido, verifica se o carro existe
+    const carId = await (async () => {
+      if (partData.car_id) {
+        const car = await prisma.car.findFirst({
+          where: {
+            OR: [
+              { id: partData.car_id },
+              { internal_id: partData.car_id }
+            ]
+          }
+        });
+
+        if (!car) {
+          throw new Error('car_not_found');
+        }
+        return car.id;
+      }
+      return existingPart.car_id;
+    })().catch((error) => {
+      if (error.message === 'car_not_found') {
+        throw error;
+      }
+      throw error;
+    });
+
+    // Processa novas imagens se fornecidas
+    let newImageUrls: string[] = [];
+    let oldImageUrls = existingPart.images as string[];
+
+    if (images && images.length > 0) {
+      console.log(`🖼️ Processando ${images.length} novas imagens para a peça ${partId}...`);
+      
+      if (images.length > 5) {
+        return {
+          error: 'too_many_files',
+          message: 'Máximo de 5 imagens permitidas.'
+        };
+      }
+
+      const uploadResults = await processAndUploadMultipleImages(images, partId);
+      const successfulUploads = uploadResults.filter((result): result is UploadResult => !('error' in result));
+      newImageUrls = successfulUploads.map(result => result.url);
+
+      if (newImageUrls.length === 0) {
+        return {
+          error: 'image_upload_failed',
+          message: 'Não foi possível fazer upload das novas imagens. Tente novamente.'
+        };
+      }
+
+      // Se há novas imagens, deleta as antigas do S3
+      if (oldImageUrls.length > 0) {
+        console.log(`🗑️ Deletando ${oldImageUrls.length} imagens antigas...`);
+        await deleteMultipleImagesFromS3(oldImageUrls);
+      }
+    } else {
+      // Se não foram fornecidas novas imagens, mantém as existentes
+      newImageUrls = oldImageUrls;
+    }
+
+    // Prepara os dados para atualização
+    const updateData: Record<string, unknown> = {};
+    
+    if (partData.name !== undefined) updateData.name = partData.name;
+    if (partData.description !== undefined) updateData.description = partData.description;
+    if (partData.condition !== undefined) updateData.condition = partData.condition;
+    if (partData.stock_address !== undefined) updateData.stock_address = partData.stock_address;
+    if (partData.dimensions !== undefined) updateData.dimensions = partData.dimensions;
+    if (partData.weight !== undefined) updateData.weight = partData.weight;
+    if (partData.compatibility !== undefined) updateData.compatibility = partData.compatibility;
+    if (partData.min_price !== undefined) updateData.min_price = partData.min_price;
+    if (partData.suggested_price !== undefined) updateData.suggested_price = partData.suggested_price;
+    if (partData.max_price !== undefined) updateData.max_price = partData.max_price;
+    if (partData.ad_title !== undefined) updateData.ad_title = partData.ad_title;
+    if (partData.ad_description !== undefined) updateData.ad_description = partData.ad_description;
+    if (partData.car_id !== undefined) updateData.car_id = carId;
+    
+    // Sempre atualiza as imagens se foram processadas novas
+    if (images && images.length > 0) {
+      updateData.images = newImageUrls;
+    }
+
+    // Atualiza a peça no banco de dados
+    const updatedPart = await prisma.part.update({
+      where: { id: partId },
+      data: updateData,
+      include: {
+        car: {
+          select: {
+            id: true,
+            internal_id: true,
+            brand: true,
+            model: true,
+            year: true,
+            color: true,
+          }
+        }
+      }
+    });
+
+    return {
+      id: updatedPart.id,
+      name: updatedPart.name,
+      description: updatedPart.description,
+      condition: updatedPart.condition,
+      stock_address: updatedPart.stock_address,
+      dimensions: updatedPart.dimensions,
+      weight: updatedPart.weight ? Number(updatedPart.weight) : null,
+      compatibility: updatedPart.compatibility,
+      min_price: updatedPart.min_price ? Number(updatedPart.min_price) : null,
+      suggested_price: updatedPart.suggested_price ? Number(updatedPart.suggested_price) : null,
+      max_price: updatedPart.max_price ? Number(updatedPart.max_price) : null,
+      ad_title: updatedPart.ad_title,
+      ad_description: updatedPart.ad_description,
+      images: updatedPart.images as string[],
+      created_at: updatedPart.created_at,
+      updated_at: updatedPart.updated_at,
+      car_id: updatedPart.car_id,
+      car: updatedPart.car,
+    };
+
+  } catch (error) {
+    console.error('Erro ao atualizar peça:', error);
+    return {
+      error: 'database_error',
+      message: 'Erro interno do servidor. Tente novamente.'
+    };
+  }
+}
+
+/**
+ * Deleta uma peça do banco de dados
+ */
+export async function deletePart(partId: string): Promise<true | ServiceError> {
+  try {
+    // Verifica se a peça existe e busca suas imagens
+    const existingPart = await prisma.part.findUnique({
+      where: { id: partId },
+      select: {
+        id: true,
+        name: true,
+        images: true,
+      }
+    });
+
+    if (!existingPart) {
+      return {
+        error: 'part_not_found',
+        message: 'Peça não encontrada.'
+      };
+    }
+
+    const imageUrls = existingPart.images as string[];
+
+    // Deleta as imagens do S3 se existirem
+    if (imageUrls.length > 0) {
+      console.log(`🗑️ Deletando ${imageUrls.length} imagens da peça ${partId}...`);
+      await deleteMultipleImagesFromS3(imageUrls);
+    }
+
+    // Deleta a peça do banco de dados
+    await prisma.part.delete({
+      where: { id: partId }
+    });
+
+    console.log(`✅ Peça ${partId} deletada com sucesso`);
+    return true;
+
+  } catch (error) {
+    console.error('Erro ao deletar peça:', error);
     return {
       error: 'database_error',
       message: 'Erro interno do servidor. Tente novamente.'

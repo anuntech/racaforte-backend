@@ -1,8 +1,8 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import type { MultipartFile } from '@fastify/multipart';
 import * as partService from '../services/part.service';
-import { CreatePartSchema } from '../schemas/part.schema';
-import type { PartResponse } from '../schemas/part.schema';
+import { CreatePartSchema, UpdatePartSchema } from '../schemas/part.schema';
+import type { PartResponse, UpdatePartResponse, DeletePartResponse } from '../schemas/part.schema';
 
 interface FormFields {
   name?: string;
@@ -296,6 +296,221 @@ export async function getAllParts(
 
   } catch (error) {
     console.error('Erro no controller getAllParts:', error);
+    
+    return reply.status(500).send({
+      success: false,
+      error: {
+        type: 'server_error',
+        message: 'Erro interno do servidor. Tente novamente.'
+      }
+    });
+  }
+}
+
+export async function updatePart(
+  request: FastifyRequest<{ Params: { id: string } }>, 
+  reply: FastifyReply
+): Promise<UpdatePartResponse> {
+  try {
+    const { id } = request.params;
+    console.log(`✏️ Atualizando peça com ID: ${id}`);
+
+    // Processa os campos do form e arquivos em uma única leitura
+    const fields: FormFields = {};
+    const files: MultipartFile[] = [];
+    const parts = request.parts();
+    
+    for await (const part of parts) {
+      if ('value' in part) {
+        console.log('Campo encontrado:', part.fieldname);
+        fields[part.fieldname as keyof FormFields] = part.value as string;
+      } else if ('file' in part) {
+        console.log('Arquivo encontrado:', {
+          fieldname: part.fieldname,
+          filename: part.filename,
+          mimetype: part.mimetype,
+          encoding: part.encoding
+        });
+        files.push(part);
+      }
+    }
+
+    console.log('Campos processados:', fields);
+
+    // Prepara os dados para validação (apenas os campos fornecidos)
+    const partData: Record<string, unknown> = {};
+    
+    if (fields.name) partData.name = fields.name;
+    if (fields.description) partData.description = fields.description;
+    if (fields.condition) partData.condition = fields.condition;
+    if (fields.stock_address) partData.stock_address = fields.stock_address;
+    if (fields.dimensions) partData.dimensions = JSON.parse(fields.dimensions);
+    if (fields.weight) partData.weight = Number.parseFloat(fields.weight);
+    if (fields.compatibility) partData.compatibility = JSON.parse(fields.compatibility);
+    if (fields.min_price) partData.min_price = Number.parseFloat(fields.min_price);
+    if (fields.suggested_price) partData.suggested_price = Number.parseFloat(fields.suggested_price);
+    if (fields.max_price) partData.max_price = Number.parseFloat(fields.max_price);
+    if (fields.ad_title) partData.ad_title = fields.ad_title;
+    if (fields.ad_description) partData.ad_description = fields.ad_description;
+    if (fields.car_id) partData.car_id = fields.car_id;
+
+    console.log('Dados processados:', partData);
+
+    // Valida os dados da peça
+    const validationResult = UpdatePartSchema.safeParse(partData);
+    if (!validationResult.success) {
+      const firstError = validationResult.error.errors[0];
+      return reply.status(400).send({
+        success: false,
+        error: {
+          type: 'validation_error',
+          message: firstError.message
+        }
+      });
+    }
+
+    // Processa imagens se fornecidas
+    let processedImages: Array<{ buffer: Buffer; filename: string }> | undefined;
+    
+    if (files.length > 0) {
+      console.log('Total de arquivos encontrados:', files.length);
+
+      if (files.length > 5) {
+        return reply.status(400).send({
+          success: false,
+          error: {
+            type: 'too_many_files',
+            message: 'Máximo de 5 imagens permitidas.'
+          }
+        });
+      }
+
+      processedImages = [];
+      for (const file of files) {
+        // Verifica o tipo de arquivo
+        const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+        console.log('Verificando tipo do arquivo:', file.filename, file.mimetype);
+        
+        if (!allowedTypes.includes(file.mimetype)) {
+          return reply.status(400).send({
+            success: false,
+            error: {
+              type: 'invalid_format',
+              message: 'Formato de arquivo inválido. Apenas JPEG, PNG e WEBP são aceitos.'
+            }
+          });
+        }
+
+        // Lê o arquivo do disco
+        console.log('Lendo buffer do arquivo:', file.filename);
+        const buffer = await file.toBuffer();
+        console.log('Tamanho do buffer:', buffer.length);
+        
+        // Validação de tamanho (50MB)
+        if (buffer.length > 52428800) {
+          return reply.status(400).send({
+            success: false,
+            error: {
+              type: 'file_too_large',
+              message: 'Arquivo muito grande. Tamanho máximo: 50MB.'
+            }
+          });
+        }
+
+        processedImages.push({
+          buffer,
+          filename: file.filename
+        });
+      }
+
+      console.log('Total de imagens processadas:', processedImages.length);
+    }
+
+    // Chama o service para atualizar a peça
+    const result = await partService.updatePart(id, validationResult.data, processedImages);
+
+    // Verifica se houve erro no service
+    if ('error' in result) {
+      const statusCode = result.error === 'part_not_found' ? 404 :
+                        result.error === 'car_not_found' ? 404 : 500;
+      return reply.status(statusCode).send({
+        success: false,
+        error: {
+          type: result.error,
+          message: result.message
+        }
+      });
+    }
+
+    // Resposta de sucesso
+    return reply.status(200).send({
+      success: true,
+      data: {
+        id: result.id,
+        name: result.name,
+        description: result.description,
+        condition: result.condition,
+        stock_address: result.stock_address,
+        dimensions: result.dimensions,
+        weight: result.weight,
+        compatibility: result.compatibility,
+        min_price: result.min_price,
+        suggested_price: result.suggested_price,
+        max_price: result.max_price,
+        ad_title: result.ad_title,
+        ad_description: result.ad_description,
+        images: result.images,
+        updated_at: result.updated_at.toISOString(),
+        car_id: result.car_id,
+        car: result.car
+      }
+    });
+
+  } catch (error) {
+    console.error('Erro no controller updatePart:', error);
+    console.error('Stack trace:', error instanceof Error ? error.stack : 'No stack trace available');
+    
+    return reply.status(500).send({
+      success: false,
+      error: {
+        type: 'server_error',
+        message: 'Erro interno do servidor. Tente novamente.'
+      }
+    });
+  }
+}
+
+export async function deletePart(
+  request: FastifyRequest<{ Params: { id: string } }>, 
+  reply: FastifyReply
+): Promise<DeletePartResponse> {
+  try {
+    const { id } = request.params;
+    console.log(`🗑️ Deletando peça com ID: ${id}`);
+
+    // Chama o service para deletar a peça
+    const result = await partService.deletePart(id);
+
+    // Verifica se houve erro no service
+    if (result !== true) {
+      const statusCode = result.error === 'part_not_found' ? 404 : 500;
+      return reply.status(statusCode).send({
+        success: false,
+        error: {
+          type: result.error,
+          message: result.message
+        }
+      });
+    }
+
+    // Resposta de sucesso
+    return reply.status(200).send({
+      success: true,
+      message: 'Peça deletada com sucesso.'
+    });
+
+  } catch (error) {
+    console.error('Erro no controller deletePart:', error);
     
     return reply.status(500).send({
       success: false,

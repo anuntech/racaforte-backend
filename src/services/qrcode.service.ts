@@ -30,7 +30,7 @@ export async function generatePartQRCode(partId: string): Promise<QRCodeResult |
     // Remove barras extras no final da URL
     const baseUrl = frontEndUrl.replace(/\/+$/, '');
     
-    // Constrói a URL para a página da peça
+    // Constroi a URL para a página da peça
     const partUrl = `${baseUrl}/part/${partId}`;
 
     console.log(`📱 Gerando QR code para: ${partUrl}`);
@@ -79,7 +79,7 @@ export async function generatePartQRCodeBuffer(partId: string): Promise<Buffer |
     // Remove barras extras no final da URL
     const baseUrl = frontEndUrl.replace(/\/+$/, '');
     
-    // Constrói a URL para a página da peça
+    // Constroi a URL para a página da peça
     const partUrl = `${baseUrl}/${partId}`;
 
     console.log(`📱 Gerando QR code buffer para: ${partUrl}`);

@@ -243,4 +243,156 @@ export async function partRoutes(app: FastifyInstance) {
       }
     }
   }, partController.getPartById);
+
+  app.put('/part/:id', {
+    schema: {
+      description: 'Atualizar uma peça existente',
+      tags: ['Part Management'],
+      consumes: ['multipart/form-data'],
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: {
+          id: {
+            type: 'string',
+            description: 'ID único da peça'
+          }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                name: { type: 'string' },
+                description: { type: 'string' },
+                condition: { type: 'string', enum: ['BOA', 'MEDIA', 'RUIM'] },
+                stock_address: { type: 'string' },
+                dimensions: {},
+                weight: { type: 'number' },
+                compatibility: {},
+                min_price: { type: 'number' },
+                suggested_price: { type: 'number' },
+                max_price: { type: 'number' },
+                ad_title: { type: 'string' },
+                ad_description: { type: 'string' },
+                images: {
+                  type: 'array',
+                  items: { type: 'string' }
+                },
+                updated_at: { type: 'string' },
+                car_id: { type: 'string' },
+                car: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string' },
+                    internal_id: { type: 'string' },
+                    brand: { type: 'string' },
+                    model: { type: 'string' },
+                    year: { type: 'integer' },
+                    color: { type: 'string' }
+                  }
+                }
+              }
+            }
+          }
+        },
+        400: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                type: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        404: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                type: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                type: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, partController.updatePart);
+
+  app.delete('/part/:id', {
+    schema: {
+      description: 'Deletar uma peça',
+      tags: ['Part Management'],
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: {
+          id: {
+            type: 'string',
+            description: 'ID único da peça'
+          }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        },
+        404: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                type: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                type: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, partController.deletePart);
 } 

@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import axios from 'axios';
 import { config } from 'dotenv';
 
@@ -196,6 +196,99 @@ export async function processAndUploadMultipleImages(
   const errorCount = results.filter(result => 'error' in result).length;
   
   console.log(`📊 Resultados: ${successCount} sucessos, ${errorCount} erros`);
+  
+  return results;
+}
+
+/**
+ * Extrai a chave (key) do S3 a partir de uma URL pública
+ */
+function extractS3KeyFromUrl(url: string): string | null {
+  try {
+    const baseUrl = process.env.HETZNER_S3_ENDPOINT?.replace(/\/+$/, '');
+    const bucket = process.env.HETZNER_S3_BUCKET;
+    
+    if (!baseUrl || !bucket) {
+      return null;
+    }
+
+    // Padrão esperado: https://endpoint/bucket/parts/partId/filename
+    const expectedPrefix = `${baseUrl}/${bucket}/`;
+    
+    if (url.startsWith(expectedPrefix)) {
+      return url.substring(expectedPrefix.length);
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('❌ Erro ao extrair chave S3 da URL:', error);
+    return null;
+  }
+}
+
+/**
+ * Deleta uma imagem do S3 da Hetzner
+ */
+export async function deleteImageFromS3(imageUrl: string): Promise<true | StorageError> {
+  try {
+    if (!process.env.HETZNER_S3_BUCKET || !process.env.HETZNER_ACCESS_KEY || !process.env.HETZNER_SECRET_KEY) {
+      throw new Error('Configurações S3 não encontradas');
+    }
+
+    // Extrai a chave do S3 a partir da URL
+    const key = extractS3KeyFromUrl(imageUrl);
+    
+    if (!key) {
+      return {
+        error: 'invalid_url',
+        message: 'URL da imagem inválida para deleção.'
+      };
+    }
+
+    console.log(`🗑️ Deletando imagem do S3: ${key}`);
+
+    const command = new DeleteObjectCommand({
+      Bucket: process.env.HETZNER_S3_BUCKET,
+      Key: key,
+    });
+
+    await s3Client.send(command);
+
+    console.log(`✅ Imagem deletada com sucesso: ${key}`);
+    return true;
+
+  } catch (error) {
+    console.error('❌ Erro ao deletar imagem do S3:', error);
+    if (error instanceof Error) {
+      return {
+        error: 'delete_error',
+        message: `Erro ao deletar imagem: ${error.message}`
+      };
+    }
+    return {
+      error: 'delete_error',
+      message: 'Erro ao deletar imagem. Tente novamente.'
+    };
+  }
+}
+
+/**
+ * Deleta múltiplas imagens do S3 em paralelo
+ */
+export async function deleteMultipleImagesFromS3(imageUrls: string[]): Promise<Array<true | StorageError>> {
+  console.log(`🗑️ Deletando ${imageUrls.length} imagens do S3 em paralelo...`);
+
+  const deletePromises = imageUrls.map((url, index) => {
+    console.log(`🗑️ Deletando imagem ${index + 1}: ${url}`);
+    return deleteImageFromS3(url);
+  });
+
+  const results = await Promise.all(deletePromises);
+  
+  const successCount = results.filter(result => result === true).length;
+  const errorCount = results.filter(result => result !== true).length;
+  
+  console.log(`📊 Resultados da deleção: ${successCount} sucessos, ${errorCount} erros`);
   
   return results;
 } 
