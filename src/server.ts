@@ -15,7 +15,10 @@ const app = Fastify({
 app.register(cors, {
   origin: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 'ngrok-skip-browser-warning'
+  ],
   credentials: true,
 });
 
