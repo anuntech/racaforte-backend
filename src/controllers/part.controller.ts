@@ -1,8 +1,12 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import type { MultipartFile } from '@fastify/multipart';
 import * as partService from '../services/part.service';
-import { CreatePartSchema, UpdatePartSchema } from '../schemas/part.schema';
-import type { PartResponse, UpdatePartResponse, DeletePartResponse } from '../schemas/part.schema';
+import { CreatePartSchema, UpdatePartSchema, ProcessPartSchema } from '../schemas/part.schema';
+import type { PartResponse, UpdatePartResponse, DeletePartResponse, ProcessPartResponse } from '../schemas/part.schema';
+import * as imageService from '../services/image.service';
+import * as storageService from '../services/storage.service';
+import * as mercadoLivreService from '../services/mercadolivre.service';
+import { PrismaClient } from '../../generated/prisma';
 
 interface FormFields {
   name?: string;
@@ -165,8 +169,7 @@ export async function createPart(
       data: {
         id: result.id,
         name: result.name,
-        images: result.images,
-        qrCode: result.qrCode
+        images: result.images
       }
     });
 
@@ -511,6 +514,259 @@ export async function deletePart(
 
   } catch (error) {
     console.error('Erro no controller deletePart:', error);
+    
+    return reply.status(500).send({
+      success: false,
+      error: {
+        type: 'server_error',
+        message: 'Erro interno do servidor. Tente novamente.'
+      }
+    });
+  }
+}
+
+const prisma = new PrismaClient();
+
+interface ProcessFormFields {
+  name?: string;
+  description?: string;
+  vehicle_internal_id?: string;
+}
+
+export async function processPart(
+  request: FastifyRequest, 
+  reply: FastifyReply
+): Promise<ProcessPartResponse> {
+  try {
+    console.log('🚀 Iniciando processamento completo da peça...');
+    
+    // Processa os campos do form e arquivos
+    const fields: ProcessFormFields = {};
+    const files: MultipartFile[] = [];
+    const parts = request.parts();
+    
+    for await (const part of parts) {
+      if ('value' in part) {
+        console.log('Campo encontrado:', part.fieldname);
+        fields[part.fieldname as keyof ProcessFormFields] = part.value as string;
+      } else if ('file' in part) {
+        console.log('Arquivo encontrado:', {
+          fieldname: part.fieldname,
+          filename: part.filename,
+          mimetype: part.mimetype,
+          encoding: part.encoding
+        });
+        files.push(part);
+      }
+    }
+
+    console.log('Campos recebidos:', fields);
+
+    // Prepara os dados para validação
+    const processData = {
+      name: fields.name,
+      description: fields.description,
+      vehicle_internal_id: fields.vehicle_internal_id,
+    };
+
+    // Valida os dados
+    const validationResult = ProcessPartSchema.safeParse(processData);
+    if (!validationResult.success) {
+      const firstError = validationResult.error.errors[0];
+      return reply.status(400).send({
+        success: false,
+        error: {
+          type: 'validation_error',
+          message: firstError.message
+        }
+      });
+    }
+
+    console.log('Total de arquivos encontrados:', files.length);
+
+    if (files.length === 0) {
+      return reply.status(400).send({
+        success: false,
+        error: {
+          type: 'no_file',
+          message: 'Nenhuma imagem foi enviada.'
+        }
+      });
+    }
+
+    if (files.length > 5) {
+      return reply.status(400).send({
+        success: false,
+        error: {
+          type: 'too_many_files',
+          message: 'Máximo de 5 imagens permitidas.'
+        }
+      });
+    }
+
+    // Busca dados do veículo
+    console.log(`🔍 Buscando veículo com ID interno: ${validationResult.data.vehicle_internal_id}`);
+    const vehicle = await prisma.car.findFirst({
+      where: {
+        OR: [
+          { id: validationResult.data.vehicle_internal_id },
+          { internal_id: validationResult.data.vehicle_internal_id }
+        ]
+      }
+    });
+
+    if (!vehicle) {
+      return reply.status(404).send({
+        success: false,
+        error: {
+          type: 'vehicle_not_found',
+          message: 'Veículo não encontrado.'
+        }
+      });
+    }
+
+    console.log(`✅ Veículo encontrado: ${vehicle.brand} ${vehicle.model} ${vehicle.year}`);
+
+    // Processa as imagens
+    const processedImages: string[] = [];
+    const imagesToUpload: Array<{ buffer: Buffer; filename: string }> = [];
+    
+    for (const file of files) {
+      // Verificação do tipo de arquivo
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      if (!allowedTypes.includes(file.mimetype)) {
+        return reply.status(400).send({
+          success: false,
+          error: {
+            type: 'invalid_format',
+            message: 'Formato de arquivo inválido. Apenas JPEG, PNG e WEBP são aceitos.'
+          }
+        });
+      }
+
+      // Lê o arquivo
+      const buffer = await file.toBuffer();
+      console.log(`📏 Arquivo ${file.filename}: ${buffer.length} bytes`);
+      
+      // Validação de tamanho (50MB)
+      if (buffer.length > 52428800) {
+        return reply.status(400).send({
+          success: false,
+          error: {
+            type: 'file_too_large',
+            message: 'Arquivo muito grande. Tamanho máximo: 50MB.'
+          }
+        });
+      }
+
+      // Converte para base64 para enviar para IA
+      const base64 = buffer.toString('base64');
+      const dataUrl = `data:${file.mimetype};base64,${base64}`;
+      processedImages.push(dataUrl);
+
+      // Guarda para upload posterior
+      imagesToUpload.push({
+        buffer,
+        filename: file.filename
+      });
+    }
+
+    // Processa com IA para gerar informações completas
+    console.log('🤖 Enviando para processamento com IA...');
+    const aiResult = await imageService.processPartWithAI(
+      processedImages,
+      validationResult.data.name,
+      validationResult.data.description,
+      vehicle.brand,
+      vehicle.model,
+      vehicle.year
+    );
+
+    // Verifica se houve erro no processamento IA
+    if ('error' in aiResult) {
+      console.log('❌ Erro no processamento IA:', aiResult.error, aiResult.message);
+      return reply.status(400).send({
+        success: false,
+        error: {
+          type: aiResult.error,
+          message: aiResult.message
+        }
+      });
+    }
+
+    console.log('✅ Processamento IA concluído com sucesso');
+
+    // Busca preços reais no Mercado Livre - OBRIGATÓRIO
+    console.log('💰 Buscando preços no Mercado Livre...');
+    const priceResult = await mercadoLivreService.getPriceSuggestions(
+      validationResult.data.name,
+      vehicle.brand,
+      vehicle.model,
+      vehicle.year,
+      'used' // Assumindo peças usadas por padrão
+    );
+
+    if ('error' in priceResult) {
+      console.error(`❌ Falha ao buscar preços no Mercado Livre: ${priceResult.message}`);
+      return reply.status(400).send({
+        success: false,
+        error: {
+          type: 'mercadolivre_error',
+          message: `Erro ao obter preços: ${priceResult.message}. Verifique se as credenciais do MercadoLivre estão configuradas corretamente.`
+        }
+      });
+    }
+
+    const prices = priceResult;
+    console.log(`✅ Preços encontrados no Mercado Livre: R$ ${prices.min_price} - R$ ${prices.max_price}`);
+
+    // Processa as imagens (remove fundo) e converte para base64
+    console.log('🖼️ Processando imagens e removendo fundo...');
+    const processedImagesBase64: string[] = [];
+    
+    for (let i = 0; i < imagesToUpload.length; i++) {
+      const { buffer, filename } = imagesToUpload[i];
+      console.log(`🔄 Processando imagem ${i + 1}/${imagesToUpload.length}: ${filename}`);
+      
+      // Remove o fundo da imagem
+      const backgroundRemovalResult = await storageService.removeBackground(buffer);
+      
+      let finalBuffer = buffer; // Imagem original como fallback
+      
+      if ('error' in backgroundRemovalResult) {
+        console.log(`📝 Remove.bg não pôde processar ${filename} (normal para imagens pequenas) - usando original`);
+      } else {
+        finalBuffer = backgroundRemovalResult;
+        console.log(`✅ Fundo removido com sucesso para ${filename}`);
+      }
+      
+      // Converte para base64
+      const base64 = finalBuffer.toString('base64');
+      const mimeType = filename.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+      const dataUrl = `data:${mimeType};base64,${base64}`;
+      
+      processedImagesBase64.push(dataUrl);
+    }
+
+    console.log(`✅ ${processedImagesBase64.length} imagens processadas e convertidas para base64`);
+
+    // Resposta de sucesso
+    return reply.status(200).send({
+      success: true,
+      data: {
+        processed_images: processedImagesBase64,
+        ad_title: aiResult.ad_title,
+        ad_description: aiResult.ad_description,
+        dimensions: aiResult.dimensions,
+        weight: aiResult.weight,
+        compatibility: aiResult.compatibility,
+        prices: prices
+      }
+    });
+
+  } catch (error) {
+    console.error('Erro no controller processPart:', error);
+    console.error('Stack trace:', error instanceof Error ? error.stack : 'No stack trace available');
     
     return reply.status(500).send({
       success: false,

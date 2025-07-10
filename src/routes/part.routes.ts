@@ -30,19 +30,7 @@ export async function partRoutes(app: FastifyInstance) {
                   type: 'array',
                   items: { type: 'string' }
                 },
-                qrCode: {
-                  type: 'object',
-                  properties: {
-                    qrCodeData: { 
-                      type: 'string',
-                      description: 'Base64 data URL da imagem do QR code'
-                    },
-                    url: { 
-                      type: 'string',
-                      description: 'URL que o QR code aponta'
-                    }
-                  }
-                }
+
               }
             }
           }
@@ -395,4 +383,112 @@ export async function partRoutes(app: FastifyInstance) {
       }
     }
   }, partController.deletePart);
+
+  app.post('/part/process', {
+    schema: {
+      description: 'Processar e gerar dados completos da peça usando IA',
+      tags: ['Part Management'],
+      consumes: ['multipart/form-data'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                processed_images: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Imagens processadas em base64 (com fundo removido)'
+                },
+                ad_title: {
+                  type: 'string',
+                  description: 'Título otimizado para anúncio'
+                },
+                ad_description: {
+                  type: 'string',
+                  description: 'Descrição detalhada para anúncio'
+                },
+                dimensions: {
+                  type: 'object',
+                  properties: {
+                    width: { type: 'string' },
+                    height: { type: 'string' },
+                    depth: { type: 'string' },
+                    unit: { type: 'string' }
+                  },
+                  description: 'Dimensões estimadas da peça'
+                },
+                weight: {
+                  type: 'number',
+                  description: 'Peso estimado em kg'
+                },
+                compatibility: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      brand: { type: 'string' },
+                      model: { type: 'string' },
+                      year: { type: 'string' }
+                    }
+                  },
+                  description: 'Lista de veículos compatíveis'
+                },
+                prices: {
+                  type: 'object',
+                  properties: {
+                    min_price: { type: 'number' },
+                    suggested_price: { type: 'number' },
+                    max_price: { type: 'number' }
+                  },
+                  description: 'Preços sugeridos para venda'
+                }
+              }
+            }
+          }
+        },
+        400: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                type: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        404: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                type: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                type: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, partController.processPart);
 } 

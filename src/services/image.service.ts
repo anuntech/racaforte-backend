@@ -342,3 +342,214 @@ export async function processImage(buffer: Buffer, filename: string): Promise<Pr
     };
   }
 } 
+
+// Interfaces para o processamento completo de peças
+interface CompleteProcessingResult {
+  ad_title: string;
+  ad_description: string;
+  dimensions: {
+    width: string;
+    height: string;
+    depth: string;
+    unit: string;
+  };
+  weight: number;
+  compatibility: Array<{
+    brand: string;
+    model: string;
+    year: string;
+  }>;
+}
+
+// Interface para processamento sem preços (preços virão do Mercado Livre)
+interface PartProcessingWithoutPrices {
+  ad_title: string;
+  ad_description: string;
+  dimensions: {
+    width: string;
+    height: string;
+    depth: string;
+    unit: string;
+  };
+  weight: number;
+  compatibility: Array<{
+    brand: string;
+    model: string;
+    year: string;
+  }>;
+}
+
+/**
+ * Processa completamente uma peça usando IA para gerar todas as informações necessárias
+ */
+export async function processPartWithAI(
+  dataUrls: string[],
+  partName: string,
+  partDescription: string,
+  vehicleBrand: string,
+  vehicleModel: string,
+  vehicleYear: number
+): Promise<PartProcessingWithoutPrices | ProcessingError> {
+  try {
+    const client = initializeOpenAI();
+    
+    console.log(`🤖 Iniciando processamento completo da peça: ${partName}`);
+    console.log(`🚗 Veículo: ${vehicleBrand} ${vehicleModel} ${vehicleYear}`);
+    console.log(`📸 Processando ${dataUrls.length} imagens`);
+
+    const imageContent = dataUrls.map(url => ({
+      type: "image_url" as const,
+      image_url: {
+        url: url
+      }
+    }));
+
+    console.log('📡 Enviando requisição completa para OpenAI...');
+    const response = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `Você é um especialista em peças automotivas. Baseado nas imagens fornecidas e nas informações da peça, gere um JSON completo com todas as especificações.
+
+INFORMAÇÕES DA PEÇA:
+- Nome: ${partName}
+- Descrição: ${partDescription}
+- Veículo: ${vehicleBrand} ${vehicleModel} ${vehicleYear}
+
+TAREFA: Analise as imagens e gere um JSON com as seguintes informações:
+
+{
+  "ad_title": "título otimizado para anúncio (máximo 60 caracteres)",
+  "ad_description": "descrição detalhada para anúncio com características, estado e aplicação",
+  "dimensions": {
+    "width": "largura em cm",
+    "height": "altura em cm", 
+    "depth": "profundidade em cm",
+    "unit": "cm"
+  },
+  "weight": peso_em_kg_como_numero,
+  "compatibility": [
+    {
+      "brand": "marca_compatível",
+      "model": "modelo_compatível", 
+      "year": "ano_ou_faixa_de_anos"
+    }
+  ]
+}
+
+INSTRUÇÕES IMPORTANTES:
+1. Para dimensões: estime baseado no tipo de peça e imagens (seja realista)
+2. Para peso: considere o material e tamanho típico da peça
+3. Para compatibilidade: liste 3-5 veículos compatíveis incluindo o informado
+4. O título do anúncio deve ser atrativo e incluir marca/modelo
+5. A descrição deve destacar características importantes para venda
+6. Se não conseguir estimar algo com precisão, use valores típicos para o tipo de peça
+7. NÃO inclua informações de preços, apenas características técnicas
+8. Retorne APENAS o JSON, sem texto adicional`
+            },
+            ...imageContent
+          ]
+        }
+      ],
+      max_tokens: 1000,
+      temperature: 0.3
+    });
+
+    const content = response.choices[0]?.message?.content;
+    console.log('📥 Resposta OpenAI recebida');
+    console.log('📄 Conteúdo bruto:', content);
+    
+    if (!content) {
+      console.log('❌ Nenhum conteúdo na resposta OpenAI');
+      return {
+        error: "api_error",
+        message: "Erro na resposta da API. Tente novamente."
+      };
+    }
+
+    try {
+      const cleanContent = cleanOpenAIResponse(content);
+      console.log('🧹 Conteúdo limpo:', cleanContent);
+      const parsedResponse = JSON.parse(cleanContent);
+      console.log('📊 Resposta parseada:', parsedResponse);
+      
+      // Validação dos campos obrigatórios
+      const requiredFields = ['ad_title', 'ad_description', 'dimensions', 'weight', 'compatibility'];
+      const missingFields = requiredFields.filter(field => !parsedResponse[field]);
+      
+      if (missingFields.length > 0) {
+        console.log('❌ Campos obrigatórios ausentes:', missingFields);
+        return {
+          error: "invalid_response",
+          message: `Resposta incompleta da API. Campos ausentes: ${missingFields.join(', ')}`
+        };
+      }
+
+      // Validação específica de estruturas
+      if (!parsedResponse.dimensions.width || !parsedResponse.dimensions.height || !parsedResponse.dimensions.depth) {
+        return {
+          error: "invalid_dimensions",
+          message: "Dimensões incompletas na resposta da API."
+        };
+      }
+
+      if (!Array.isArray(parsedResponse.compatibility) || parsedResponse.compatibility.length === 0) {
+        return {
+          error: "invalid_compatibility",
+          message: "Lista de compatibilidade inválida na resposta da API."
+        };
+      }
+
+
+
+      console.log('✅ Processamento completo bem-sucedido');
+      return {
+        ad_title: parsedResponse.ad_title,
+        ad_description: parsedResponse.ad_description,
+        dimensions: {
+          width: String(parsedResponse.dimensions.width),
+          height: String(parsedResponse.dimensions.height),
+          depth: String(parsedResponse.dimensions.depth),
+          unit: parsedResponse.dimensions.unit || 'cm'
+        },
+        weight: Number(parsedResponse.weight),
+        compatibility: parsedResponse.compatibility.map((item: { brand: string; model: string; year: string }) => ({
+          brand: String(item.brand),
+          model: String(item.model),
+          year: String(item.year)
+        }))
+      };
+
+    } catch (parseError) {
+      console.error('Erro ao fazer parse da resposta OpenAI:', parseError);
+      console.error('Resposta bruta OpenAI:', content);
+      return {
+        error: "parse_error",
+        message: "Erro ao processar resposta da API. Tente novamente."
+      };
+    }
+
+  } catch (error: unknown) {
+    console.error('Erro da API OpenAI:', error);
+    
+    // Verifica se é erro de rate limit
+    if (error && typeof error === 'object' && 'status' in error && error.status === 429) {
+      const errorObj = error as { headers?: { 'retry-after'?: string } };
+      const retryAfter = errorObj.headers?.['retry-after'];
+      const retryMessage = retryAfter ? ` Tente novamente em ${Math.ceil(Number(retryAfter) / 60)} minutos.` : '';
+      return {
+        error: "rate_limit",
+        message: `Limite de uso da API excedido.${retryMessage} Tente novamente mais tarde.`
+      };
+    }
+    
+    return {
+      error: "api_error",
+      message: "Erro de conexão com a API. Tente novamente."
+    };
+  }
+} 

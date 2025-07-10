@@ -66,10 +66,6 @@ export const PartResponseSchema = z.object({
     id: z.string(),
     name: z.string(),
     images: z.array(z.string()),
-    qrCode: z.object({
-      qrCodeData: z.string().optional(),
-      url: z.string().optional(),
-    }).optional(),
   }).optional(),
   error: z.object({
     type: z.string(),
@@ -194,6 +190,44 @@ export const AllPartsResponseSchema = z.object({
   }).optional(),
 });
 
+// Schema para processamento de peças com IA
+export const ProcessPartSchema = z.object({
+  name: z.string().min(1, 'Nome da peça é obrigatório').trim(),
+  description: z.string().min(1, 'Descrição da peça é obrigatória').trim(),
+  vehicle_internal_id: z.string().min(1, 'ID interno do veículo é obrigatório').trim(),
+});
+
+// Schema para resposta do processamento de peças
+export const ProcessPartResponseSchema = z.object({
+  success: z.boolean(),
+  data: z.object({
+    processed_images: z.array(z.string()),
+    ad_title: z.string(),
+    ad_description: z.string(),
+    dimensions: z.object({
+      width: z.string(),
+      height: z.string(),
+      depth: z.string(),
+      unit: z.string(),
+    }),
+    weight: z.number(),
+    compatibility: z.array(z.object({
+      brand: z.string(),
+      model: z.string(),
+      year: z.string(),
+    })),
+    prices: z.object({
+      min_price: z.number(),
+      suggested_price: z.number(),
+      max_price: z.number(),
+    }),
+  }).optional(),
+  error: z.object({
+    type: z.string(),
+    message: z.string(),
+  }).optional(),
+});
+
 // Tipos TypeScript inferidos dos schemas
 export type CreatePartRequest = z.infer<typeof CreatePartSchema>;
 export type UpdatePartRequest = z.infer<typeof UpdatePartSchema>;
@@ -203,6 +237,8 @@ export type PartDetailsResponse = z.infer<typeof PartDetailsResponseSchema>;
 export type UpdatePartResponse = z.infer<typeof UpdatePartResponseSchema>;
 export type DeletePartResponse = z.infer<typeof DeletePartResponseSchema>;
 export type AllPartsResponse = z.infer<typeof AllPartsResponseSchema>;
+export type ProcessPartRequest = z.infer<typeof ProcessPartSchema>;
+export type ProcessPartResponse = z.infer<typeof ProcessPartResponseSchema>;
 export type PartCondition = z.infer<typeof PartConditionSchema>;
 export type Dimensions = z.infer<typeof DimensionsSchema>;
 export type Compatibility = z.infer<typeof CompatibilitySchema>; 

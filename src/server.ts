@@ -5,6 +5,8 @@ import { healthRoutes } from './routes/health';
 import { imageRoutes } from './routes/image.routes';
 import { carRoutes } from './routes/car.routes';
 import { partRoutes } from './routes/part.routes';
+import { authRoutes } from './routes/auth.routes';
+import { initializeMercadoLivre } from './services/mercadolivre.service';
 
 config();
 
@@ -26,6 +28,7 @@ app.register(healthRoutes);
 app.register(imageRoutes);
 app.register(carRoutes);
 app.register(partRoutes);
+app.register(authRoutes);
 
 const start = async () => {
   try {
@@ -34,6 +37,12 @@ const start = async () => {
 
     await app.listen({ host, port });
     console.log(`🚀 Servidor rodando em http://${host}:${port}`);
+    
+    // Inicializa automaticamente a autenticação MercadoLivre
+    console.log('');
+    await initializeMercadoLivre();
+    console.log('');
+    
   } catch (err) {
     app.log.error(err);
     process.exit(1);

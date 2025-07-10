@@ -2,8 +2,6 @@ import { PrismaClient } from '../../generated/prisma';
 import type { CreatePartRequest, UpdatePartRequest } from '../schemas/part.schema';
 import type { UploadResult, StorageError } from './storage.service';
 import { processAndUploadMultipleImages, deleteMultipleImagesFromS3 } from './storage.service';
-import { generatePartQRCode } from './qrcode.service';
-import type { QRCodeResult, QRCodeError } from './qrcode.service';
 
 const prisma = new PrismaClient();
 
@@ -16,7 +14,6 @@ interface PartCreationResult {
   id: string;
   name: string;
   images: string[];
-  qrCode?: QRCodeResult;
 }
 
 interface PartDetailsResult {
@@ -96,9 +93,9 @@ export async function createPart(
       }
     });
 
-    // Processa e faz upload das imagens
-    console.log(`🖼️ Processando ${images.length} imagens para a peça ${part.id}...`);
-    const uploadResults = await processAndUploadMultipleImages(images, part.id);
+    // Processa e faz upload das imagens (sem remoção de background, já feito no /part/process)
+    console.log(`🖼️ Fazendo upload de ${images.length} imagens para a peça ${part.id}...`);
+    const uploadResults = await processAndUploadMultipleImages(images, part.id, false);
 
     // Filtra apenas os uploads bem-sucedidos
     const successfulUploads = uploadResults.filter((result): result is UploadResult => !('error' in result));
@@ -124,25 +121,12 @@ export async function createPart(
       }
     });
 
-    // Gera o QR code para a peça
-    console.log(`📱 Gerando QR code para a peça ${part.id}...`);
-    const qrCodeResult = await generatePartQRCode(part.id);
-
     // Prepara a resposta
     const result: PartCreationResult = {
       id: updatedPart.id,
       name: updatedPart.name,
       images: updatedPart.images as string[],
     };
-
-    // Adiciona o QR code se foi gerado com sucesso
-    if ('qrCodeData' in qrCodeResult) {
-      result.qrCode = qrCodeResult;
-      console.log('✅ QR code gerado e incluído na resposta');
-    } else {
-      console.log('⚠️ Erro ao gerar QR code:', qrCodeResult.message);
-      // Continua sem o QR code se houver erro
-    }
 
     return result;
 
@@ -326,7 +310,7 @@ export async function updatePart(
 
     // Processa novas imagens se fornecidas
     let newImageUrls: string[] = [];
-    let oldImageUrls = existingPart.images as string[];
+    const oldImageUrls = existingPart.images as string[];
 
     if (images && images.length > 0) {
       console.log(`🖼️ Processando ${images.length} novas imagens para a peça ${partId}...`);
@@ -338,7 +322,7 @@ export async function updatePart(
         };
       }
 
-      const uploadResults = await processAndUploadMultipleImages(images, partId);
+      const uploadResults = await processAndUploadMultipleImages(images, partId, false);
       const successfulUploads = uploadResults.filter((result): result is UploadResult => !('error' in result));
       newImageUrls = successfulUploads.map(result => result.url);
 
