@@ -2,13 +2,17 @@ import type { FastifyInstance } from 'fastify';
 import * as partController from '../controllers/part.controller';
 
 export async function partRoutes(app: FastifyInstance) {
-  // Registra suporte a multipart para esta rota
+  // Registra suporte a multipart para esta rota com configurações otimizadas para iOS
   await app.register(import('@fastify/multipart'), {
     limits: {
-      fileSize: 52428800, // 50MB
+      fileSize: 52428800, // 50MB por arquivo
       files: 5, // Máximo 5 arquivos
+      fieldNameSize: 500, // Tamanho máximo do nome do campo
+      fieldSize: 1048576, // 1MB para campos de texto
+      headerPairs: 2000, // Máximo de pares de headers
     },
     attachFieldsToBody: false, // Desabilita o processamento automático dos campos
+    throwFileSizeLimit: false, // Não lança erro imediatamente, permite tratamento customizado
   });
 
   app.post('/part', {

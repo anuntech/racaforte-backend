@@ -11,7 +11,7 @@ Backend da aplicação **Raca Forte**, construído com **Fastify**, **TypeScript
 - 💾 [Prisma ORM](https://www.prisma.io/) — ORM de próxima geração para Node.js e TypeScript
 - 🐬 [MySQL 8.0](https://www.mysql.com/) — Banco de dados relacional
 - 🗂️ [Zod](https://zod.dev/) — Validação de schemas tipada
-- 🤖 [OpenAI API](https://openai.com/) — Identificação de peças automotivas por IA
+- 🤖 [OpenAI API](https://openai.com/) — Identificação de peças automotivas e sugestão de preços por IA
 - ☁️ [AWS SDK S3](https://docs.aws.amazon.com/sdk-for-javascript/) — Armazenamento de arquivos
 - 🐳 Docker — Banco em container isolado
 - 🚀 [Biome](https://biomejs.dev/) — Formatter + Linter + Organizador de imports (feito em Rust)
@@ -43,7 +43,6 @@ NODE_ENV=development
 # Outras APIs
 HETZNER_ACCESS_KEY=
 HETZNER_SECRET_KEY=
-MERCADOLIVRE_API_KEY=
 REMOVEBG_API_KEY=
 ```
 
@@ -219,6 +218,56 @@ curl -X POST http://localhost:3333/upload-images \
   "data": {
     "name": "Para-choque Dianteiro",
     "description": "Para-choque dianteiro automotivo..."
+  }
+}
+```
+
+### 🧠 Processamento Completo de Peças com IA
+
+```http
+POST /part/process
+Content-Type: multipart/form-data
+```
+
+**Especificações:**
+- ✅ Máximo: 5 imagens por requisição
+- ✅ Gera: título, descrição, dimensões, peso, compatibilidade e **preços**
+- ✅ IA: OpenAI GPT-4o-mini especializada em precificação
+- ✅ Remove fundo das imagens automaticamente
+
+**Campos obrigatórios:**
+- `name`: Nome da peça
+- `description`: Descrição da peça  
+- `vehicle_internal_id`: ID do veículo
+- `images`: Arquivos de imagem
+
+**Resposta de Sucesso:**
+```json
+{
+  "success": true,
+  "data": {
+    "processed_images": ["data:image/png;base64,..."],
+    "ad_title": "Alternador Toyota Corolla 2020 - Excelente Estado",
+    "ad_description": "Alternador original em perfeito estado...",
+    "dimensions": {
+      "width": "15cm",
+      "height": "8cm", 
+      "depth": "25cm",
+      "unit": "cm"
+    },
+    "weight": 12,
+    "compatibility": [
+      {
+        "brand": "Toyota",
+        "model": "Corolla",
+        "year": "2018-2022"
+      }
+    ],
+    "prices": {
+      "min_price": 180.00,
+      "suggested_price": 250.00,
+      "max_price": 320.00
+    }
   }
 }
 ```

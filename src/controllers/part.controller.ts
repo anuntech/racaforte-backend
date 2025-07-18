@@ -5,7 +5,6 @@ import { CreatePartSchema, UpdatePartSchema, ProcessPartSchema } from '../schema
 import type { PartResponse, UpdatePartResponse, DeletePartResponse, ProcessPartResponse } from '../schemas/part.schema';
 import * as imageService from '../services/image.service';
 import * as storageService from '../services/storage.service';
-import * as mercadoLivreService from '../services/mercadolivre.service';
 import { PrismaClient } from '../../generated/prisma';
 
 interface FormFields {
@@ -29,27 +28,55 @@ export async function createPart(
   reply: FastifyReply
 ): Promise<PartResponse> {
   try {
-    console.log('Iniciando processamento da requisição...');
+    console.log('📱 Iniciando processamento da requisição...');
     
-    // Processa os campos do form e arquivos em uma única leitura
+    // Timeout específico para iOS (pode ser mais lento)
+    const startTime = Date.now();
+    
+    // Processa os campos do form e arquivos com tratamento melhorado para iOS
     const fields: FormFields = {};
     const files: MultipartFile[] = [];
     const parts = request.parts();
     
+    console.log('🔄 Processando partes do multipart/form-data...');
+    let partCount = 0;
+    
+    try {
     for await (const part of parts) {
+        partCount++;
+        console.log(`📦 Processando parte ${partCount}...`);
+        
       if ('value' in part) {
-        console.log('Campo encontrado:', part.fieldname);
+          console.log(`📝 Campo encontrado: ${part.fieldname} = ${part.value}`);
         fields[part.fieldname as keyof FormFields] = part.value as string;
       } else if ('file' in part) {
-        console.log('Arquivo encontrado:', {
+          console.log('📁 Arquivo encontrado:', {
           fieldname: part.fieldname,
           filename: part.filename,
           mimetype: part.mimetype,
           encoding: part.encoding
         });
         files.push(part);
+          
+          // iOS pode ser mais lento para enviar arquivos grandes
+          const processingTime = Date.now() - startTime;
+          if (processingTime > 60000) { // 1 minuto
+            console.log(`⏰ Processamento demorado detectado: ${processingTime}ms`);
+          }
+        }
       }
+    } catch (error) {
+      console.error('❌ Erro ao processar multipart data:', error);
+      return reply.status(400).send({
+        success: false,
+        error: {
+          type: 'multipart_error',
+          message: 'Erro ao processar dados do formulário. Tente novamente.'
+        }
+      });
     }
+    
+    console.log(`✅ Processamento completo: ${partCount} partes, ${files.length} arquivos, ${Object.keys(fields).length} campos`);
 
     console.log('Campos processados:', fields);
 
@@ -107,44 +134,75 @@ export async function createPart(
       });
     }
 
-    // Processa os arquivos
+    // Processa os arquivos com otimizações para iOS
     const processedImages = [];
-    for (const file of files) {
+    
+    console.log(`🔍 Iniciando validação de ${files.length} arquivos...`);
+    
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      console.log(`📁 Processando arquivo ${i + 1}/${files.length}: ${file.filename}`);
+      
       // Verifica o tipo de arquivo
       const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-      console.log('Verificando tipo do arquivo:', file.filename, file.mimetype);
+      console.log(`🔍 Verificando tipo: ${file.mimetype}`);
       
       if (!allowedTypes.includes(file.mimetype)) {
+        console.log(`❌ Tipo não permitido: ${file.mimetype}`);
         return reply.status(400).send({
           success: false,
           error: {
             type: 'invalid_format',
-            message: 'Formato de arquivo inválido. Apenas JPEG, PNG e WEBP são aceitos.'
+            message: `Formato de arquivo inválido: ${file.mimetype}. Apenas JPEG, PNG e WEBP são aceitos.`
           }
         });
       }
 
-      // Lê o arquivo do disco
-      console.log('Lendo buffer do arquivo:', file.filename);
-      const buffer = await file.toBuffer();
-      console.log('Tamanho do buffer:', buffer.length);
+      try {
+        // Lê o arquivo com timeout para iOS
+        console.log(`💾 Convertendo arquivo para buffer: ${file.filename}`);
+        const bufferStartTime = Date.now();
+        
+        const buffer = await Promise.race([
+          file.toBuffer(),
+          new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error('Timeout na conversão do arquivo')), 30000)
+          )
+        ]);
+        
+        const bufferTime = Date.now() - bufferStartTime;
+        console.log(`✅ Buffer criado em ${bufferTime}ms, tamanho: ${buffer.length} bytes`);
       
       // Validação de tamanho (50MB)
       if (buffer.length > 52428800) {
+          console.log(`❌ Arquivo muito grande: ${buffer.length} bytes`);
         return reply.status(400).send({
           success: false,
           error: {
             type: 'file_too_large',
-            message: 'Arquivo muito grande. Tamanho máximo: 50MB.'
+              message: `Arquivo muito grande: ${Math.round(buffer.length / 1024 / 1024)}MB. Tamanho máximo: 50MB.`
           }
         });
       }
 
       processedImages.push({
         buffer,
-        filename: file.filename
+          filename: file.filename || `arquivo_${i + 1}`
+        });
+        
+      } catch (error) {
+        console.error(`❌ Erro ao processar arquivo ${file.filename}:`, error);
+        return reply.status(400).send({
+          success: false,
+          error: {
+            type: 'file_processing_error',
+            message: `Erro ao processar arquivo ${file.filename}. Tente novamente com um arquivo menor.`
+          }
       });
     }
+    }
+    
+    console.log(`✅ Todos os ${processedImages.length} arquivos processados com sucesso`);
 
     console.log('Total de imagens processadas:', processedImages.length);
 
@@ -671,15 +729,16 @@ export async function processPart(
       });
     }
 
-    // Processa com IA para gerar informações completas
-    console.log('🤖 Enviando para processamento com IA...');
+    // Processa com IA para gerar informações completas incluindo preços
+    console.log('🤖 Enviando para processamento com IA (incluindo sugestões de preços)...');
     const aiResult = await imageService.processPartWithAI(
       processedImages,
       validationResult.data.name,
       validationResult.data.description,
       vehicle.brand,
       vehicle.model,
-      vehicle.year
+      vehicle.year,
+      true // includePrices = true para gerar preços com IA
     );
 
     // Verifica se houve erro no processamento IA
@@ -695,30 +754,6 @@ export async function processPart(
     }
 
     console.log('✅ Processamento IA concluído com sucesso');
-
-    // Busca preços reais no Mercado Livre - OBRIGATÓRIO
-    console.log('💰 Buscando preços no Mercado Livre...');
-    const priceResult = await mercadoLivreService.getPriceSuggestions(
-      validationResult.data.name,
-      vehicle.brand,
-      vehicle.model,
-      vehicle.year,
-      'used' // Assumindo peças usadas por padrão
-    );
-
-    if ('error' in priceResult) {
-      console.error(`❌ Falha ao buscar preços no Mercado Livre: ${priceResult.message}`);
-      return reply.status(400).send({
-        success: false,
-        error: {
-          type: 'mercadolivre_error',
-          message: `Erro ao obter preços: ${priceResult.message}. Verifique se as credenciais do MercadoLivre estão configuradas corretamente.`
-        }
-      });
-    }
-
-    const prices = priceResult;
-    console.log(`✅ Preços encontrados no Mercado Livre: R$ ${prices.min_price} - R$ ${prices.max_price}`);
 
     // Processa as imagens (remove fundo) e converte para base64
     console.log('🖼️ Processando imagens e removendo fundo...');
@@ -760,7 +795,7 @@ export async function processPart(
         dimensions: aiResult.dimensions,
         weight: aiResult.weight,
         compatibility: aiResult.compatibility,
-        prices: prices
+        prices: 'prices' in aiResult ? aiResult.prices : undefined
       }
     });
 

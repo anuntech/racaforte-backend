@@ -379,8 +379,31 @@ interface PartProcessingWithoutPrices {
   }>;
 }
 
+// Interface para processamento completo com preços gerados por IA
+interface PartProcessingWithPrices {
+  ad_title: string;
+  ad_description: string;
+  dimensions: {
+    width: string;
+    height: string;
+    depth: string;
+    unit: string;
+  };
+  weight: number;
+  compatibility: Array<{
+    brand: string;
+    model: string;
+    year: string;
+  }>;
+  prices: {
+    min_price: number;
+    suggested_price: number;
+    max_price: number;
+  };
+}
+
 /**
- * Processa completamente uma peça usando IA para gerar todas as informações necessárias
+ * Processa completamente uma peça usando IA para gerar todas as informações necessárias incluindo preços
  */
 export async function processPartWithAI(
   dataUrls: string[],
@@ -388,8 +411,9 @@ export async function processPartWithAI(
   partDescription: string,
   vehicleBrand: string,
   vehicleModel: string,
-  vehicleYear: number
-): Promise<PartProcessingWithoutPrices | ProcessingError> {
+  vehicleYear: number,
+  includePrices = true
+): Promise<PartProcessingWithPrices | PartProcessingWithoutPrices | ProcessingError> {
   try {
     const client = initializeOpenAI();
     
@@ -405,24 +429,31 @@ export async function processPartWithAI(
     }));
 
     console.log('📡 Enviando requisição completa para OpenAI...');
-    const response = await client.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: `Você é um especialista em peças automotivas. Baseado nas imagens fornecidas e nas informações da peça, gere um JSON completo com todas as especificações.
-
-INFORMAÇÕES DA PEÇA:
-- Nome: ${partName}
-- Descrição: ${partDescription}
-- Veículo: ${vehicleBrand} ${vehicleModel} ${vehicleYear}
-
-TAREFA: Analise as imagens e gere um JSON com as seguintes informações:
-
-{
+    
+    // Cria o JSON schema baseado em se deve incluir preços ou não
+    const jsonSchema = includePrices ? `{
+  "ad_title": "título otimizado para anúncio (máximo 60 caracteres)",
+  "ad_description": "descrição detalhada para anúncio com características, estado e aplicação",
+  "dimensions": {
+    "width": "largura em cm",
+    "height": "altura em cm", 
+    "depth": "profundidade em cm",
+    "unit": "cm"
+  },
+  "weight": peso_em_kg_como_numero,
+  "compatibility": [
+    {
+      "brand": "marca_compatível",
+      "model": "modelo_compatível", 
+      "year": "ano_ou_faixa_de_anos"
+    }
+  ],
+  "prices": {
+    "min_price": preco_minimo_em_reais_numero,
+    "suggested_price": preco_sugerido_em_reais_numero,
+    "max_price": preco_maximo_em_reais_numero
+  }
+}` : `{
   "ad_title": "título otimizado para anúncio (máximo 60 caracteres)",
   "ad_description": "descrição detalhada para anúncio com características, estado e aplicação",
   "dimensions": {
@@ -439,7 +470,40 @@ TAREFA: Analise as imagens e gere um JSON com as seguintes informações:
       "year": "ano_ou_faixa_de_anos"
     }
   ]
-}
+}`;
+
+    // Instruções adicionais para preços se incluídos
+    const priceInstructions = includePrices ? `
+8. Para preços (MUITO IMPORTANTE):
+   - Analise o tipo de peça, condição, marca do veículo e ano
+   - Considere peças similares no mercado brasileiro
+   - min_price: 30-40% menor que o preço sugerido (preço para venda rápida)
+   - suggested_price: preço justo de mercado baseado na condição e tipo
+   - max_price: 20-30% maior que o sugerido (máximo que alguém pagaria)
+   - Use valores realistas em reais (R$) considerando o mercado brasileiro
+   - Para peças comuns: R$ 50-500, para peças especializadas: R$ 200-2000+
+9. Retorne APENAS o JSON, sem texto adicional` : `
+8. NÃO inclua informações de preços, apenas características técnicas
+9. Retorne APENAS o JSON, sem texto adicional`;
+
+    const response = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `Você é um especialista em peças automotivas e precificação no mercado brasileiro. Baseado nas imagens fornecidas e nas informações da peça, gere um JSON completo com todas as especificações${includePrices ? ' incluindo sugestões de preços' : ''}.
+
+INFORMAÇÕES DA PEÇA:
+- Nome: ${partName}
+- Descrição: ${partDescription}
+- Veículo: ${vehicleBrand} ${vehicleModel} ${vehicleYear}
+
+TAREFA: Analise as imagens e gere um JSON com as seguintes informações:
+
+${jsonSchema}
 
 INSTRUÇÕES IMPORTANTES:
 1. Para dimensões: estime baseado no tipo de peça e imagens (seja realista)
@@ -447,9 +511,8 @@ INSTRUÇÕES IMPORTANTES:
 3. Para compatibilidade: liste 3-5 veículos compatíveis incluindo o informado
 4. O título do anúncio deve ser atrativo e incluir marca/modelo
 5. A descrição deve destacar características importantes para venda
-6. Se não conseguir estimar algo com precisão, use valores típicos para o tipo de peça
-7. NÃO inclua informações de preços, apenas características técnicas
-8. Retorne APENAS o JSON, sem texto adicional`
+6. Considere que a peça é usada mas em boa condição
+7. Se não conseguir estimar algo com precisão, use valores típicos para o tipo de peça${priceInstructions}`
             },
             ...imageContent
           ]
@@ -479,6 +542,9 @@ INSTRUÇÕES IMPORTANTES:
       
       // Validação dos campos obrigatórios
       const requiredFields = ['ad_title', 'ad_description', 'dimensions', 'weight', 'compatibility'];
+      if (includePrices) {
+        requiredFields.push('prices');
+      }
       const missingFields = requiredFields.filter(field => !parsedResponse[field]);
       
       if (missingFields.length > 0) {
@@ -504,10 +570,31 @@ INSTRUÇÕES IMPORTANTES:
         };
       }
 
+      // Validação específica para preços se incluídos
+      if (includePrices) {
+        if (!parsedResponse.prices || 
+            typeof parsedResponse.prices.min_price !== 'number' ||
+            typeof parsedResponse.prices.suggested_price !== 'number' ||
+            typeof parsedResponse.prices.max_price !== 'number') {
+          return {
+            error: "invalid_prices",
+            message: "Preços inválidos na resposta da API."
+          };
+        }
 
+        // Validação lógica dos preços
+        if (parsedResponse.prices.min_price >= parsedResponse.prices.suggested_price ||
+            parsedResponse.prices.suggested_price >= parsedResponse.prices.max_price) {
+          return {
+            error: "invalid_price_logic",
+            message: "Lógica de preços inválida (min < sugerido < max)."
+          };
+        }
+      }
 
       console.log('✅ Processamento completo bem-sucedido');
-      return {
+      
+      const baseResult = {
         ad_title: parsedResponse.ad_title,
         ad_description: parsedResponse.ad_description,
         dimensions: {
@@ -523,6 +610,20 @@ INSTRUÇÕES IMPORTANTES:
           year: String(item.year)
         }))
       };
+
+      // Adiciona preços se incluídos
+      if (includePrices) {
+        return {
+          ...baseResult,
+          prices: {
+            min_price: Number(parsedResponse.prices.min_price),
+            suggested_price: Number(parsedResponse.prices.suggested_price),
+            max_price: Number(parsedResponse.prices.max_price)
+          }
+        };
+      }
+
+      return baseResult;
 
     } catch (parseError) {
       console.error('Erro ao fazer parse da resposta OpenAI:', parseError);
