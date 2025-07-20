@@ -15,6 +15,11 @@ const app = Fastify({
   bodyLimit: 104857600, // 100MB total
   keepAliveTimeout: 65000, // 65 segundos
   maxRequestsPerSocket: 0, // Sem limite
+  // Configurações adicionais para iOS
+  connectionTimeout: 60000, // 60 segundos para estabelecer conexão
+  pluginTimeout: 60000, // 60 segundos para plugins
+  trustProxy: true, // Importante para ngrok/proxy reverso
+  ignoreTrailingSlash: true,
 });
 
 app.register(cors, {
@@ -22,9 +27,18 @@ app.register(cors, {
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: [
     'Content-Type', 
-    'Authorization', 'ngrok-skip-browser-warning'
+    'Authorization', 
+    'ngrok-skip-browser-warning',
+    'X-Requested-With',
+    'Accept',
+    'Origin',
+    'User-Agent'
   ],
   credentials: true,
+  // Configurações adicionais para iOS
+  optionsSuccessStatus: 200, // iOS às vezes precisa de 200 ao invés de 204
+  preflightContinue: false,
+  maxAge: 86400 // Cache preflight por 24h
 });
 
 app.register(healthRoutes);

@@ -415,11 +415,51 @@ export async function processPartWithAI(
   includePrices = true
 ): Promise<PartProcessingWithPrices | PartProcessingWithoutPrices | ProcessingError> {
   try {
+    const aiStartTime = Date.now();
     const client = initializeOpenAI();
     
     console.log(`🤖 Iniciando processamento completo da peça: ${partName}`);
     console.log(`🚗 Veículo: ${vehicleBrand} ${vehicleModel} ${vehicleYear}`);
     console.log(`📸 Processando ${dataUrls.length} imagens`);
+
+    // DEBUG: Análise detalhada das imagens para IA
+    console.log(`🔍 DEBUG - Análise das imagens para IA:`);
+    let totalPayloadSize = 0;
+    
+    dataUrls.forEach((url, index) => {
+      const sizeBytes = url.length;
+      const sizeMB = (sizeBytes / 1024 / 1024).toFixed(2);
+      totalPayloadSize += sizeBytes;
+      
+      // Extrair tipo MIME da URL
+      const mimeMatch = url.match(/^data:([^;]+);base64,/);
+      const mimeType = mimeMatch ? mimeMatch[1] : 'unknown';
+      
+      // Calcular tamanho da imagem original (base64 é ~33% maior)
+      const originalSizeBytes = sizeBytes * 0.75;
+      const originalSizeMB = (originalSizeBytes / 1024 / 1024).toFixed(2);
+      
+      console.log(`   📷 Imagem ${index + 1}:`);
+      console.log(`      MIME: ${mimeType}`);
+      console.log(`      Tamanho base64: ${sizeMB} MB`);
+      console.log(`      Tamanho original estimado: ${originalSizeMB} MB`);
+      console.log(`      Caracteres: ${sizeBytes.toLocaleString()}`);
+    });
+
+    // Verifica tamanho das imagens para otimizar para iOS
+    const totalPayloadSizeMB = (totalPayloadSize / 1024 / 1024).toFixed(2);
+    console.log(`📊 DEBUG - Payload total para IA: ${totalPayloadSizeMB} MB`);
+    console.log(`📊 DEBUG - Tamanho médio por imagem: ${(totalPayloadSize / dataUrls.length / 1024 / 1024).toFixed(2)} MB`);
+    
+    // Se as imagens são muito grandes, usa timeout mais longo
+    const isLargeRequest = totalPayloadSize > 10000000; // 10MB
+    const timeoutMs = isLargeRequest ? 40000 : 30000; // 40s para grandes, 30s para normais
+    
+    console.log(`⏱️ Usando timeout de ${timeoutMs/1000}s para esta requisição (${isLargeRequest ? 'GRANDE' : 'NORMAL'})`);
+
+    // DEBUG: Análise da complexidade da requisição
+    const estimatedTokens = Math.ceil(totalPayloadSize / 1000); // Estimativa grosseira
+    console.log(`🧮 DEBUG - Tokens estimados: ${estimatedTokens.toLocaleString()}`);
 
     const imageContent = dataUrls.map(url => ({
       type: "image_url" as const,
@@ -429,6 +469,7 @@ export async function processPartWithAI(
     }));
 
     console.log('📡 Enviando requisição completa para OpenAI...');
+    const requestStartTime = Date.now();
     
     // Cria o JSON schema baseado em se deve incluir preços ou não
     const jsonSchema = includePrices ? `{
@@ -474,19 +515,19 @@ export async function processPartWithAI(
 
     // Instruções adicionais para preços se incluídos
     const priceInstructions = includePrices ? `
-8. Para preços (MUITO IMPORTANTE):
-   - Analise o tipo de peça, condição, marca do veículo e ano
-   - Considere peças similares no mercado brasileiro
-   - min_price: 30-40% menor que o preço sugerido (preço para venda rápida)
-   - suggested_price: preço justo de mercado baseado na condição e tipo
-   - max_price: 20-30% maior que o sugerido (máximo que alguém pagaria)
-   - Use valores realistas em reais (R$) considerando o mercado brasileiro
-   - Para peças comuns: R$ 50-500, para peças especializadas: R$ 200-2000+
+8. Para preços:
+   - Pesquise no Mercado Livre Brasil atual (2025) por "${partName} ${vehicleBrand} ${vehicleModel}" usado
+   - Base os preços em anúncios reais atuais de peças similares usadas
+   - min_price: 30% menor que a média do mercado
+   - suggested_price: preço médio de mercado atual
+   - max_price: 20% maior que a média
+   - Considere marca do veículo e raridade da peça
 9. Retorne APENAS o JSON, sem texto adicional` : `
 8. NÃO inclua informações de preços, apenas características técnicas
 9. Retorne APENAS o JSON, sem texto adicional`;
 
-    const response = await client.chat.completions.create({
+    // Cria o request com timeout customizado
+    const openaiPromise = client.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         {
@@ -494,37 +535,56 @@ export async function processPartWithAI(
           content: [
             {
               type: "text",
-              text: `Você é um especialista em peças automotivas e precificação no mercado brasileiro. Baseado nas imagens fornecidas e nas informações da peça, gere um JSON completo com todas as especificações${includePrices ? ' incluindo sugestões de preços' : ''}.
+              text: `Você é especialista em autopeças e conhece o Mercado Livre Brasil atual (2024).
 
-INFORMAÇÕES DA PEÇA:
-- Nome: ${partName}
-- Descrição: ${partDescription}
-- Veículo: ${vehicleBrand} ${vehicleModel} ${vehicleYear}
+PEÇA: ${partName} - ${partDescription}
+VEÍCULO: ${vehicleBrand} ${vehicleModel} ${vehicleYear}
 
-TAREFA: Analise as imagens e gere um JSON com as seguintes informações:
+Analise as imagens e gere um JSON com especificações${includePrices ? ' e preços baseados no Mercado Livre atual' : ''}:
 
 ${jsonSchema}
 
-INSTRUÇÕES IMPORTANTES:
-1. Para dimensões: estime baseado no tipo de peça e imagens (seja realista)
-2. Para peso: considere o material e tamanho típico da peça
-3. Para compatibilidade: liste 3-5 veículos compatíveis incluindo o informado
-4. O título do anúncio deve ser atrativo e incluir marca/modelo
-5. A descrição deve destacar características importantes para venda
-6. Considere que a peça é usada mas em boa condição
-7. Se não conseguir estimar algo com precisão, use valores típicos para o tipo de peça${priceInstructions}`
+INSTRUÇÕES:
+1. Estime dimensões e peso baseado na imagem
+2. Liste 3-5 veículos compatíveis 
+3. Título como anúncios do Mercado Livre
+4. Descrição de vendedor experiente
+5. Considere peça usada em boa condição${priceInstructions}`
             },
             ...imageContent
           ]
         }
       ],
       max_tokens: 1000,
-      temperature: 0.3
+      temperature: 0.2 // Reduzido para ser mais consistente com preços reais
     });
+
+    // Timeout personalizado para iOS
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`OpenAI timeout após ${timeoutMs}ms`));
+      }, timeoutMs);
+    });
+
+    // DEBUG: Log antes do envio
+    console.log(`🚀 DEBUG - Enviando para OpenAI (payload: ${totalPayloadSizeMB} MB, timeout: ${timeoutMs}ms)`);
+
+    // Race entre request e timeout
+    const response = await Promise.race([openaiPromise, timeoutPromise]);
+
+    const requestTime = Date.now() - requestStartTime;
+    console.log(`⏱️ DEBUG - Resposta OpenAI recebida em: ${requestTime}ms`);
 
     const content = response.choices[0]?.message?.content;
     console.log('📥 Resposta OpenAI recebida');
-    console.log('📄 Conteúdo bruto:', content);
+    
+    // DEBUG: Análise da resposta
+    if (content) {
+      console.log(`📏 DEBUG - Tamanho da resposta: ${content.length} caracteres`);
+      console.log(`📄 Conteúdo bruto (primeiros 200 chars): ${content.substring(0, 200)}${content.length > 200 ? '...' : ''}`);
+    } else {
+      console.log('❌ DEBUG - Nenhum conteúdo na resposta OpenAI');
+    }
     
     if (!content) {
       console.log('❌ Nenhum conteúdo na resposta OpenAI');
@@ -535,10 +595,14 @@ INSTRUÇÕES IMPORTANTES:
     }
 
     try {
+      const parseStartTime = Date.now();
       const cleanContent = cleanOpenAIResponse(content);
-      console.log('🧹 Conteúdo limpo:', cleanContent);
+      console.log(`🧹 DEBUG - Conteúdo limpo (primeiros 200 chars): ${cleanContent.substring(0, 200)}${cleanContent.length > 200 ? '...' : ''}`);
+      
       const parsedResponse = JSON.parse(cleanContent);
-      console.log('📊 Resposta parseada:', parsedResponse);
+      const parseTime = Date.now() - parseStartTime;
+      console.log(`⏱️ DEBUG - JSON parseado em: ${parseTime}ms`);
+      console.log('📊 Resposta parseada (campos):', Object.keys(parsedResponse));
       
       // Validação dos campos obrigatórios
       const requiredFields = ['ad_title', 'ad_description', 'dimensions', 'weight', 'compatibility'];
@@ -557,6 +621,7 @@ INSTRUÇÕES IMPORTANTES:
 
       // Validação específica de estruturas
       if (!parsedResponse.dimensions.width || !parsedResponse.dimensions.height || !parsedResponse.dimensions.depth) {
+        console.log('❌ DEBUG - Dimensões incompletas:', parsedResponse.dimensions);
         return {
           error: "invalid_dimensions",
           message: "Dimensões incompletas na resposta da API."
@@ -564,6 +629,7 @@ INSTRUÇÕES IMPORTANTES:
       }
 
       if (!Array.isArray(parsedResponse.compatibility) || parsedResponse.compatibility.length === 0) {
+        console.log('❌ DEBUG - Compatibilidade inválida:', parsedResponse.compatibility);
         return {
           error: "invalid_compatibility",
           message: "Lista de compatibilidade inválida na resposta da API."
@@ -576,6 +642,7 @@ INSTRUÇÕES IMPORTANTES:
             typeof parsedResponse.prices.min_price !== 'number' ||
             typeof parsedResponse.prices.suggested_price !== 'number' ||
             typeof parsedResponse.prices.max_price !== 'number') {
+          console.log('❌ DEBUG - Preços inválidos:', parsedResponse.prices);
           return {
             error: "invalid_prices",
             message: "Preços inválidos na resposta da API."
@@ -585,14 +652,76 @@ INSTRUÇÕES IMPORTANTES:
         // Validação lógica dos preços
         if (parsedResponse.prices.min_price >= parsedResponse.prices.suggested_price ||
             parsedResponse.prices.suggested_price >= parsedResponse.prices.max_price) {
+          console.log('❌ DEBUG - Lógica de preços inválida:', parsedResponse.prices);
           return {
             error: "invalid_price_logic",
             message: "Lógica de preços inválida (min < sugerido < max)."
           };
         }
+        
+        console.log(`💰 DEBUG - Preços gerados: min R$${parsedResponse.prices.min_price}, sugerido R$${parsedResponse.prices.suggested_price}, max R$${parsedResponse.prices.max_price}`);
+        
+        // DEBUG: Validação adicional de preços realistas
+        const minPrice = parsedResponse.prices.min_price;
+        const suggestedPrice = parsedResponse.prices.suggested_price;
+        const maxPrice = parsedResponse.prices.max_price;
+        
+        console.log(`🔍 DEBUG - Análise de preços para ${partName}:`);
+        console.log(`   Peça: ${partName}`);
+        console.log(`   Veículo: ${vehicleBrand} ${vehicleModel} ${vehicleYear}`);
+        console.log(`   Preço mínimo: R$ ${minPrice}`);
+        console.log(`   Preço sugerido: R$ ${suggestedPrice}`);
+        console.log(`   Preço máximo: R$ ${maxPrice}`);
+        console.log(`   Diferença min-sugerido: ${((suggestedPrice - minPrice) / minPrice * 100).toFixed(1)}%`);
+        console.log(`   Diferença sugerido-max: ${((maxPrice - suggestedPrice) / suggestedPrice * 100).toFixed(1)}%`);
+        
+        // Alerta para preços suspeitos
+        if (suggestedPrice < 30) {
+          console.log(`⚠️ DEBUG - PREÇO SUSPEITO: Muito baixo (R$ ${suggestedPrice}) para ${partName}`);
+        }
+        if (suggestedPrice > 3000) {
+          console.log(`⚠️ DEBUG - PREÇO SUSPEITO: Muito alto (R$ ${suggestedPrice}) para ${partName}`);
+        }
+        
+        // Validação de range de preços por categoria
+        const partNameLower = partName.toLowerCase();
+        let expectedRange = { min: 50, max: 1000 }; // Default
+        
+        if (partNameLower.includes('alternador')) {
+          expectedRange = { min: 150, max: 700 };
+        } else if (partNameLower.includes('motor de partida') || partNameLower.includes('arranque')) {
+          expectedRange = { min: 120, max: 500 };
+        } else if (partNameLower.includes('farol') || partNameLower.includes('lanterna')) {
+          expectedRange = { min: 70, max: 350 };
+        } else if (partNameLower.includes('para-choque') || partNameLower.includes('parachoque')) {
+          expectedRange = { min: 180, max: 900 };
+        } else if (partNameLower.includes('radiador')) {
+          expectedRange = { min: 120, max: 600 };
+        } else if (partNameLower.includes('volante')) {
+          expectedRange = { min: 80, max: 400 };
+        } else if (partNameLower.includes('espelho')) {
+          expectedRange = { min: 50, max: 250 };
+        }
+        
+        if (suggestedPrice < expectedRange.min || suggestedPrice > expectedRange.max) {
+          console.log(`⚠️ DEBUG - PREÇO FORA DO RANGE ESPERADO:`);
+          console.log(`   Esperado para ${partName}: R$ ${expectedRange.min}-${expectedRange.max}`);
+          console.log(`   Gerado: R$ ${suggestedPrice}`);
+        } else {
+          console.log(`✅ DEBUG - Preço dentro do range esperado: R$ ${expectedRange.min}-${expectedRange.max}`);
+        }
       }
 
+      const totalAITime = Date.now() - aiStartTime;
+      console.log(`⏱️ DEBUG - Processamento IA total: ${totalAITime}ms (request: ${requestTime}ms, parse: ${parseTime}ms)`);
       console.log('✅ Processamento completo bem-sucedido');
+      
+      // DEBUG: Análise do resultado final
+      console.log(`📝 DEBUG - Título gerado: "${parsedResponse.ad_title}" (${parsedResponse.ad_title?.length} chars)`);
+      console.log(`📝 DEBUG - Descrição gerada: ${parsedResponse.ad_description?.length} chars`);
+      console.log(`📏 DEBUG - Dimensões: ${parsedResponse.dimensions?.width}x${parsedResponse.dimensions?.height}x${parsedResponse.dimensions?.depth} ${parsedResponse.dimensions?.unit}`);
+      console.log(`⚖️ DEBUG - Peso: ${parsedResponse.weight} kg`);
+      console.log(`🔗 DEBUG - Compatibilidades: ${parsedResponse.compatibility?.length} veículos`);
       
       const baseResult = {
         ad_title: parsedResponse.ad_title,
@@ -626,8 +755,9 @@ INSTRUÇÕES IMPORTANTES:
       return baseResult;
 
     } catch (parseError) {
-      console.error('Erro ao fazer parse da resposta OpenAI:', parseError);
-      console.error('Resposta bruta OpenAI:', content);
+      console.error('❌ DEBUG - Erro ao fazer parse da resposta OpenAI:', parseError);
+      console.error('❌ DEBUG - Resposta bruta OpenAI:', content);
+      console.error('❌ DEBUG - Tamanho da resposta:', content?.length);
       return {
         error: "parse_error",
         message: "Erro ao processar resposta da API. Tente novamente."
@@ -635,13 +765,37 @@ INSTRUÇÕES IMPORTANTES:
     }
 
   } catch (error: unknown) {
-    console.error('Erro da API OpenAI:', error);
+    console.error('❌ DEBUG - Erro da API OpenAI:', error);
+    
+    // DEBUG: Análise detalhada do erro
+    if (error && typeof error === 'object') {
+      console.log('🔍 DEBUG - Tipo do erro:', error.constructor.name);
+      if ('message' in error) {
+        console.log('🔍 DEBUG - Mensagem do erro:', error.message);
+      }
+      if ('status' in error) {
+        console.log('🔍 DEBUG - Status do erro:', error.status);
+      }
+      if ('code' in error) {
+        console.log('🔍 DEBUG - Código do erro:', error.code);
+      }
+    }
+    
+    // Tratamento específico para timeout
+    if (error instanceof Error && error.message.includes('timeout')) {
+      console.log('⏰ DEBUG - Timeout detectado no processamento IA');
+      return {
+        error: "openai_timeout",
+        message: "Timeout no processamento IA. Tente novamente com menos imagens ou imagens menores."
+      };
+    }
     
     // Verifica se é erro de rate limit
     if (error && typeof error === 'object' && 'status' in error && error.status === 429) {
       const errorObj = error as { headers?: { 'retry-after'?: string } };
       const retryAfter = errorObj.headers?.['retry-after'];
       const retryMessage = retryAfter ? ` Tente novamente em ${Math.ceil(Number(retryAfter) / 60)} minutos.` : '';
+      console.log('🚫 DEBUG - Rate limit atingido, retry-after:', retryAfter);
       return {
         error: "rate_limit",
         message: `Limite de uso da API excedido.${retryMessage} Tente novamente mais tarde.`
