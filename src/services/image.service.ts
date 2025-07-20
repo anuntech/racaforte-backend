@@ -100,26 +100,30 @@ export async function processMultipleImages(dataUrls: string[]): Promise<Process
           content: [
             {
               type: "text",
-              text: `Identifique a peça de carro na imagem e forneça seu nome e uma descrição detalhada.
-Liste as informações no formato JSON:
+              text: `Identifique esta peça específica e suas características técnicas.
+
+Retorne JSON:
 {
-  "name": "nome",
-  "description": "descrição"
+  "name": "nome específico completo",
+  "description": "características técnicas específicas"
 }
 
-IMPORTANTE: 
-- Analise todas as imagens fornecidas para ter uma visão completa da peça
-- As imagens mostram a mesma peça de diferentes ângulos
-- Forneça o nome específico da peça automotiva
-- Inclua uma descrição detalhada com função, características e aplicações
-- Se não conseguir identificar com certeza, retorne: {"error": "low_confidence", "message": "Não foi possível identificar a peça com precisão suficiente"}
-- Seja específico e técnico na descrição`
+NOME: Inclua marca, modelo do carro e especificações
+Exemplo: "Alternador Honda Civic 1.7 70A 12V 2001-2004"
+
+DESCRIÇÃO: Apenas características técnicas desta peça específica
+- Especificações técnicas
+- Estado visual aparente
+- Marcações/códigos visíveis
+- NÃO explique como funciona aquela peça em geral
+
+Se não conseguir identificar: {"error": "low_confidence", "message": "Não foi possível identificar"}`
             },
             ...imageContent
           ]
         }
       ],
-      max_tokens: 500,
+      max_tokens: 300,
       temperature: 0.1
     });
 
@@ -233,18 +237,24 @@ export async function identifyAutomotivePart(base64Image: string): Promise<Proce
           content: [
             {
               type: "text",
-              text: `Identifique a peça de carro na imagem e forneça seu nome e uma descrição detalhada.
-Liste as informações no formato JSON:
+              text: `Identifique esta peça específica e suas características técnicas.
+
+Retorne JSON:
 {
-  "name": "nome da peça",
-  "description": "descrição detalhada"
+  "name": "nome específico completo",
+  "description": "características técnicas específicas"  
 }
 
-IMPORTANTE: 
-- Forneça o nome específico da peça automotiva
-- Inclua uma descrição detalhada com função, características e aplicações
-- Se não conseguir identificar com certeza, retorne: {"error": "low_confidence", "message": "Não foi possível identificar a peça com precisão suficiente"}
-- Seja específico e técnico na descrição`
+NOME: Inclua marca, modelo do carro, voltagem/amperagem/especificações
+Exemplo: "Alternador Honda Civic 1.7 70A 12V 2001-2004"
+
+DESCRIÇÃO: Apenas características técnicas desta peça específica
+- Especificações técnicas (voltagem, amperagem, dimensões aproximadas)
+- Estado visual aparente  
+- Marcações/códigos visíveis
+- NÃO explique como funciona um alternador em geral
+
+Se não conseguir identificar: {"error": "low_confidence", "message": "Não foi possível identificar"}`
             },
             {
               type: "image_url",
@@ -255,7 +265,7 @@ IMPORTANTE:
           ]
         }
       ],
-      max_tokens: 500,
+      max_tokens: 300,
       temperature: 0.1
     });
 
@@ -281,7 +291,7 @@ IMPORTANTE:
       }
 
       // Valida campos obrigatórios
-      if (!parsedResponse.partName || !parsedResponse.description) {
+      if (!parsedResponse.name || !parsedResponse.description) {
         return {
           error: "invalid_response",
           message: "Resposta incompleta da API. Por favor, insira os dados manualmente."
@@ -289,7 +299,7 @@ IMPORTANTE:
       }
 
       return {
-        partName: parsedResponse.partName,
+        partName: parsedResponse.name,
         description: parsedResponse.description
       };
 
@@ -516,8 +526,8 @@ export async function processPartWithAI(
     // Instruções adicionais para preços se incluídos
     const priceInstructions = includePrices ? `
 8. Para preços:
-   - Pesquise no Mercado Livre Brasil atual (2025) por "${partName} ${vehicleBrand} ${vehicleModel}" usado
-   - Base os preços em anúncios reais atuais de peças similares usadas
+   - Pesquise no mercado atual (2025) por "${partName}"
+   - Base os preços em anúncios reais atuais da mesma peça
    - min_price: 30% menor que a média do mercado
    - suggested_price: preço médio de mercado atual
    - max_price: 20% maior que a média
