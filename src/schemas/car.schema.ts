@@ -104,6 +104,33 @@ export const GenerateInternalIdResponseSchema = z.object({
   }).optional(),
 });
 
+export const CarPartsResponseSchema = z.object({
+  success: z.boolean(),
+  data: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    description: z.string(),
+    condition: z.enum(['BOA', 'MEDIA', 'RUIM']),
+    stock_address: z.string(),
+    dimensions: z.unknown().optional(),
+    weight: z.number().optional(),
+    compatibility: z.unknown().optional(),
+    min_price: z.number().optional(),
+    suggested_price: z.number().optional(),
+    max_price: z.number().optional(),
+    ad_title: z.string().optional(),
+    ad_description: z.string().optional(),
+    images: z.array(z.string()),
+    created_at: z.string(),
+    updated_at: z.string(),
+    car_id: z.string(),
+  })).optional(),
+  error: z.object({
+    type: z.string(),
+    message: z.string(),
+  }).optional(),
+});
+
 export type CreateCarRequest = z.infer<typeof CreateCarSchema>;
 export type UpdateCarRequest = z.infer<typeof UpdateCarSchema>;
 export type CarParams = z.infer<typeof CarParamsSchema>;
@@ -113,4 +140,5 @@ export type DeleteResponse = z.infer<typeof DeleteResponseSchema>;
 export type InternalIdsResponse = z.infer<typeof InternalIdsResponseSchema>;
 export type AllCarsResponse = z.infer<typeof AllCarsResponseSchema>;
 export type GenerateInternalIdRequest = z.infer<typeof GenerateInternalIdSchema>;
-export type GenerateInternalIdResponse = z.infer<typeof GenerateInternalIdResponseSchema>; 
+export type GenerateInternalIdResponse = z.infer<typeof GenerateInternalIdResponseSchema>;
+export type CarPartsResponse = z.infer<typeof CarPartsResponseSchema>; 

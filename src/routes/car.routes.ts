@@ -434,4 +434,87 @@ export async function carRoutes(app: FastifyInstance) {
       }
     }
   }, carController.getAllCars);
+
+  app.get('/car/:identifier/parts', {
+    schema: {
+      description: 'Buscar todas as peças de um veículo específico',
+      tags: ['Car Management'],
+      params: {
+        type: 'object',
+        required: ['identifier'],
+        properties: {
+          identifier: {
+            type: 'string',
+            description: 'ID ou internal_id do veículo',
+            minLength: 1
+          }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            data: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  name: { type: 'string' },
+                  description: { type: 'string' },
+                  condition: { 
+                    type: 'string',
+                    enum: ['BOA', 'MEDIA', 'RUIM']
+                  },
+                  stock_address: { type: 'string' },
+                  dimensions: { type: 'object' },
+                  weight: { type: 'number' },
+                  compatibility: { type: 'object' },
+                  min_price: { type: 'number' },
+                  suggested_price: { type: 'number' },
+                  max_price: { type: 'number' },
+                  ad_title: { type: 'string' },
+                  ad_description: { type: 'string' },
+                  images: {
+                    type: 'array',
+                    items: { type: 'string' }
+                  },
+                  created_at: { type: 'string' },
+                  updated_at: { type: 'string' },
+                  car_id: { type: 'string' }
+                }
+              }
+            }
+          }
+        },
+        404: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                type: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                type: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, carController.getCarParts);
 } 

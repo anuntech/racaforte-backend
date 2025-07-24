@@ -22,6 +22,26 @@ interface ServiceError {
   message: string;
 }
 
+interface CarPartResult {
+  id: string;
+  name: string;
+  description: string;
+  condition: 'BOA' | 'MEDIA' | 'RUIM';
+  stock_address: string;
+  dimensions: unknown;
+  weight: number | null;
+  compatibility: unknown;
+  min_price: number | null;
+  suggested_price: number | null;
+  max_price: number | null;
+  ad_title: string | null;
+  ad_description: string | null;
+  images: string[];
+  created_at: Date;
+  updated_at: Date;
+  car_id: string;
+}
+
 // Instância compartilhada do Prisma
 const prisma = new PrismaClient();
 
@@ -376,4 +396,65 @@ export async function getAllCars(): Promise<CarDetailsResult[] | ServiceError> {
 
 export async function disconnectPrisma(): Promise<void> {
   await prisma.$disconnect();
+}
+
+export async function getCarParts(identifier: string): Promise<CarPartResult[] | ServiceError> {
+  try {
+    // Busca o carro usando a função existente
+    const car = await findCarByIdentifier(identifier);
+
+    if (!car) {
+      return {
+        error: 'car_not_found',
+        message: 'Veículo não encontrado.'
+      };
+    }
+
+    // Busca todas as peças do carro
+    const parts = await prisma.part.findMany({
+      where: { car_id: car.id },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        condition: true,
+        stock_address: true,
+        dimensions: true,
+        weight: true,
+        compatibility: true,
+        min_price: true,
+        suggested_price: true,
+        max_price: true,
+        ad_title: true,
+        ad_description: true,
+        images: true,
+        created_at: true,
+        updated_at: true,
+        car_id: true,
+      },
+      orderBy: {
+        created_at: 'desc'
+      }
+    });
+
+    // Converte as imagens de JSON para array de strings
+    const partsWithFormattedImages: CarPartResult[] = parts.map(part => ({
+      ...part,
+      images: Array.isArray(part.images) ? part.images.filter(img => typeof img === 'string') as string[] : [],
+      weight: part.weight ? Number(part.weight) : null,
+      min_price: part.min_price ? Number(part.min_price) : null,
+      suggested_price: part.suggested_price ? Number(part.suggested_price) : null,
+      max_price: part.max_price ? Number(part.max_price) : null,
+    }));
+
+    return partsWithFormattedImages;
+
+  } catch (error) {
+    console.error('Erro ao buscar peças do carro:', error);
+    
+    return {
+      error: 'database_error',
+      message: 'Erro interno do servidor. Tente novamente.'
+    };
+  }
 } 

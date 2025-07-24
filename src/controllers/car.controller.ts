@@ -1,6 +1,6 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import * as carService from '../services/car.service';
-import type { CreateCarRequest, UpdateCarRequest, CarParams, CarResponse, CarDetailsResponse, DeleteResponse, InternalIdsResponse, AllCarsResponse, GenerateInternalIdRequest, GenerateInternalIdResponse } from '../schemas/car.schema';
+import type { CreateCarRequest, UpdateCarRequest, CarParams, CarResponse, CarDetailsResponse, DeleteResponse, InternalIdsResponse, AllCarsResponse, GenerateInternalIdRequest, GenerateInternalIdResponse, CarPartsResponse } from '../schemas/car.schema';
 import { CreateCarSchema, UpdateCarSchema, CarParamsSchema, GenerateInternalIdSchema } from '../schemas/car.schema';
 
 export async function createCar(request: FastifyRequest, reply: FastifyReply): Promise<CarResponse> {
@@ -364,6 +364,80 @@ export async function generateInternalId(request: FastifyRequest, reply: Fastify
 
   } catch (error) {
     console.error('Erro no controller generateInternalId:', error);
+    
+    return reply.status(500).send({
+      success: false,
+      error: {
+        type: 'server_error',
+        message: 'Erro interno do servidor. Tente novamente.'
+      }
+    });
+  }
+}
+
+export async function getCarParts(request: FastifyRequest, reply: FastifyReply): Promise<CarPartsResponse> {
+  try {
+    // Valida os parâmetros da URL
+    const validationResult = CarParamsSchema.safeParse(request.params);
+    
+    if (!validationResult.success) {
+      const firstError = validationResult.error.errors[0];
+      return reply.status(400).send({
+        success: false,
+        error: {
+          type: 'validation_error',
+          message: firstError.message
+        }
+      });
+    }
+
+    const { identifier }: CarParams = validationResult.data;
+
+    // Chama o service para buscar as peças do carro
+    const result = await carService.getCarParts(identifier);
+
+    // Verifica se houve erro no service
+    if ('error' in result) {
+      const statusCode = result.error === 'car_not_found' ? 404 : 500;
+      
+      return reply.status(statusCode).send({
+        success: false,
+        error: {
+          type: result.error,
+          message: result.message
+        }
+      });
+    }
+
+    // Formatar as datas para string e garantir compatibilidade
+    const formattedParts = result.map(part => ({
+      id: part.id,
+      name: part.name,
+      description: part.description,
+      condition: part.condition,
+      stock_address: part.stock_address,
+      dimensions: part.dimensions,
+      weight: part.weight,
+      compatibility: part.compatibility,
+      min_price: part.min_price,
+      suggested_price: part.suggested_price,
+      max_price: part.max_price,
+      ad_title: part.ad_title,
+      ad_description: part.ad_description,
+      images: part.images,
+      created_at: part.created_at.toISOString(),
+      updated_at: part.updated_at.toISOString(),
+      car_id: part.car_id,
+    }));
+
+    // Resposta de sucesso
+    return reply.status(200).send({
+      success: true,
+      data: formattedParts
+    });
+
+  } catch (error) {
+    console.error('Erro no controller getCarParts:', error);
     
     return reply.status(500).send({
       success: false,
