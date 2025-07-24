@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import * as partController from '../controllers/part.controller';
 
 export async function partRoutes(app: FastifyInstance) {
-  // Registra suporte a multipart para esta rota com configurações otimizadas para iOS
+  // Registra suporte a multipart para esta rota com configurações otimizadas para iOS/Expo/React Native
   await app.register(import('@fastify/multipart'), {
     limits: {
       fileSize: 52428800, // 50MB por arquivo

@@ -32,43 +32,138 @@ const s3Client = new S3Client({
  */
 export async function removeBackground(imageBuffer: Buffer): Promise<Buffer | StorageError> {
   try {
+    const startTime = Date.now();
+    
     if (!process.env.REMOVEBG_API_KEY) {
       throw new Error('REMOVEBG_API_KEY não configurada');
     }
 
-    console.log('🔄 Removendo background da imagem...');
+    // DEBUG: Análise da imagem de entrada
+    const inputSizeMB = (imageBuffer.length / 1024 / 1024).toFixed(2);
+    console.log(`🔄 Removendo background da imagem (${inputSizeMB} MB)...`);
     
+    // DEBUG: Detectar formato da imagem pelos magic bytes
+    let imageFormat = 'unknown';
+    if (imageBuffer[0] === 0xFF && imageBuffer[1] === 0xD8 && imageBuffer[2] === 0xFF) {
+      imageFormat = 'JPEG';
+    } else if (imageBuffer[0] === 0x89 && imageBuffer[1] === 0x50 && imageBuffer[2] === 0x4E && imageBuffer[3] === 0x47) {
+      imageFormat = 'PNG';
+    } else if (imageBuffer.slice(0, 4).toString() === 'RIFF' && imageBuffer.slice(8, 12).toString() === 'WEBP') {
+      imageFormat = 'WEBP';
+    }
+    
+    console.log(`🖼️ DEBUG - Remove.bg input:`);
+    console.log(`   Formato detectado: ${imageFormat}`);
+    console.log(`   Tamanho: ${imageBuffer.length} bytes (${inputSizeMB} MB)`);
+    
+    const formDataStartTime = Date.now();
     const formData = new FormData();
     const blob = new Blob([imageBuffer], { type: 'image/jpeg' });
     formData.append('image_file', blob);
     formData.append('size', 'auto');
+    
+    const formDataTime = Date.now() - formDataStartTime;
+    console.log(`⏱️ DEBUG - FormData criado em: ${formDataTime}ms`);
 
-    const response = await axios.post('https://api.remove.bg/v1.0/removebg', formData, {
+    // Configuração otimizada para iOS com timeout mais baixo
+    const axiosConfig = {
       headers: {
         'X-Api-Key': process.env.REMOVEBG_API_KEY,
         'Content-Type': 'multipart/form-data',
       },
-      responseType: 'arraybuffer'
-    });
+      responseType: 'arraybuffer' as const,
+      timeout: 20000, // 20 segundos - mais conservador para iOS
+      maxRedirects: 3,
+      // Configurações de retry para iOS
+      validateStatus: (status: number) => status < 500, // Não retry em 4xx
+    };
 
-    console.log('✅ Background removido com sucesso');
-    return Buffer.from(response.data);
+    console.log(`📡 DEBUG - Enviando para remove.bg (timeout: ${axiosConfig.timeout}ms)...`);
+    const requestStartTime = Date.now();
+    
+    const response = await axios.post('https://api.remove.bg/v1.0/removebg', formData, axiosConfig);
+
+    const requestTime = Date.now() - requestStartTime;
+    const resultBuffer = Buffer.from(response.data);
+    const outputSizeMB = (resultBuffer.length / 1024 / 1024).toFixed(2);
+    const totalTime = Date.now() - startTime;
+    const compressionPercent = ((1 - resultBuffer.length / imageBuffer.length) * 100).toFixed(1);
+    
+    console.log(`✅ Background removido com sucesso`);
+    console.log(`⏱️ DEBUG - Remove.bg timing:`);
+    console.log(`   Request: ${requestTime}ms`);
+    console.log(`   Total: ${totalTime}ms`);
+    console.log(`📏 DEBUG - Remove.bg resultado:`);
+    console.log(`   Tamanho original: ${inputSizeMB} MB`);
+    console.log(`   Tamanho resultado: ${outputSizeMB} MB`);
+    console.log(`   Compressão: ${compressionPercent}%`);
+    console.log(`   Status response: ${response.status}`);
+    
+    return resultBuffer;
 
   } catch (error) {
+    const totalTime = Date.now() - (Date.now() - 1000); // Estimativa
     console.error('❌ Erro ao remover background:', error);
     
+    // DEBUG: Análise detalhada do erro
     if (axios.isAxiosError(error)) {
+      console.log(`🔍 DEBUG - Axios error details:`);
+      console.log(`   Code: ${error.code}`);
+      console.log(`   Status: ${error.response?.status}`);
+      console.log(`   Status text: ${error.response?.statusText}`);
+      console.log(`   Message: ${error.message}`);
+      
+      if (error.response?.data) {
+        const errorData = error.response.data;
+        if (typeof errorData === 'string') {
+          console.log(`   Response data: ${errorData.substring(0, 200)}`);
+        } else {
+          console.log(`   Response data type: ${typeof errorData}`);
+        }
+      }
+      
+      // Timeout específico
+      if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+        console.log(`⏰ DEBUG - Timeout detectado após tentativa de conexão`);
+        return {
+          error: 'removebg_timeout',
+          message: 'Timeout na remoção de background. Usando imagem original.'
+        };
+      }
+      
       if (error.response?.status === 402) {
+        console.log(`💳 DEBUG - Quota excedida (status 402)`);
         return {
           error: 'quota_exceeded',
           message: 'Cota da API removeBG excedida. Usando imagem original.'
         };
       }
       
+      // Rate limit
+      if (error.response?.status === 429) {
+        console.log(`🚫 DEBUG - Rate limit (status 429)`);
+        return {
+          error: 'rate_limit',
+          message: 'Rate limit da API removeBG. Usando imagem original.'
+        };
+      }
+      
+      // Outros erros HTTP
+      if (error.response?.status) {
+        console.log(`🔴 DEBUG - HTTP error status ${error.response.status}`);
+      }
+      
       return {
         error: 'removebg_api_error',
         message: 'Erro na API removeBG. Usando imagem original.'
       };
+    }
+
+    // Outros tipos de erro
+    if (error instanceof Error) {
+      console.log(`🔍 DEBUG - Generic error:`);
+      console.log(`   Type: ${error.constructor.name}`);
+      console.log(`   Message: ${error.message}`);
     }
 
     return {
