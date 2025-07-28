@@ -140,6 +140,56 @@ export async function createPart(
 }
 
 /**
+ * Busca peças por nome (busca parcial case-insensitive)
+ */
+export async function searchPartsByName(searchTerm: string): Promise<PartDetailsResult[] | ServiceError> {
+  try {
+    const parts = await prisma.part.findMany({
+      where: {
+        name: {
+          contains: searchTerm
+        }
+      },
+      include: {
+        car: {
+          select: {
+            id: true,
+            internal_id: true,
+            brand: true,
+            model: true,
+            year: true,
+            color: true,
+          }
+        }
+      },
+      orderBy: {
+        created_at: 'desc'
+      }
+    });
+
+    // Converte as imagens de JSON para array de strings e formata preços
+    const formattedParts: PartDetailsResult[] = parts.map(part => ({
+      ...part,
+      images: Array.isArray(part.images) ? part.images.filter(img => typeof img === 'string') as string[] : [],
+      weight: part.weight ? Number(part.weight) : null,
+      min_price: part.min_price ? Number(part.min_price) : null,
+      suggested_price: part.suggested_price ? Number(part.suggested_price) : null,
+      max_price: part.max_price ? Number(part.max_price) : null,
+      car: part.car,
+    }));
+
+    return formattedParts;
+
+  } catch (error) {
+    console.error('Erro ao buscar peças por nome:', error);
+    return {
+      error: 'database_error',
+      message: 'Erro interno do servidor. Tente novamente.'
+    };
+  }
+}
+
+/**
  * Busca uma peça por ID
  */
 export async function getPartById(partId: string): Promise<PartDetailsResult | ServiceError> {

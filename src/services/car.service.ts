@@ -45,33 +45,33 @@ interface CarPartResult {
 // Instância compartilhada do Prisma
 const prisma = new PrismaClient();
 
-// Falar com o João sobre abreviações
+// Gera abreviação da marca com 2 caracteres
 function generateBrandAbbreviation(brand: string): string {
   const brandMap: { [key: string]: string } = {
-    'toyota': 'TOY',
-    'honda': 'HON',
-    'ford': 'FOR',
-    'chevrolet': 'CHE',
-    'volkswagen': 'VWN',
-    'fiat': 'FIA',
-    'hyundai': 'HYU',
-    'nissan': 'NIS',
-    'peugeot': 'PEU',
-    'renault': 'REN',
-    'bmw': 'BMW',
-    'mercedes': 'MER',
-    'audi': 'AUD',
-    'jeep': 'JEE',
-    'mitsubishi': 'MIT',
-    'kia': 'KIA',
-    'subaru': 'SUB',
-    'mazda': 'MAZ',
-    'suzuki': 'SUZ',
-    'citroen': 'CIT',
+    'toyota': 'TO',
+    'honda': 'HO',
+    'ford': 'FO',
+    'chevrolet': 'CH',
+    'volkswagen': 'VW',
+    'fiat': 'FI',
+    'hyundai': 'HY',
+    'nissan': 'NI',
+    'peugeot': 'PE',
+    'renault': 'RE',
+    'bmw': 'BM',
+    'mercedes': 'ME',
+    'audi': 'AU',
+    'jeep': 'JE',
+    'mitsubishi': 'MI',
+    'kia': 'KI',
+    'subaru': 'SU',
+    'mazda': 'MA',
+    'suzuki': 'SZ',
+    'citroen': 'CI',
   };
 
   const normalizedBrand = brand.toLowerCase().trim();
-  return brandMap[normalizedBrand] || brand.substring(0, 3).toUpperCase();
+  return brandMap[normalizedBrand] || brand.substring(0, 2).toUpperCase();
 }
 
 function generateModelAbbreviation(model: string): string {
@@ -80,23 +80,23 @@ function generateModelAbbreviation(model: string): string {
   return cleanModel.substring(0, 3) || 'MOD';
 }
 
-// Falar com o João sobre abreviações
+// Gera abreviação da cor com 2 caracteres (preto=pr, prata=pt, outras=primeiras 2 letras)
 function generateColorAbbreviation(color: string): string {
   const colorMap: { [key: string]: string } = {
-    'preto': 'PRT',
-    'branco': 'BR',
+    'preto': 'PR',
     'prata': 'PT',
-    'cinza': 'CZ',
+    'branco': 'BR',
+    'cinza': 'CI',
     'azul': 'AZ',
     'vermelho': 'VM',
     'verde': 'VD',
     'amarelo': 'AM',
-    'dourado': 'DR',
+    'dourado': 'DO',
     'marrom': 'MR',
-    'bege': 'BG',
+    'bege': 'BE',
     'rosa': 'RS',
     'roxo': 'RX',
-    'laranja': 'LJ',
+    'laranja': 'LA',
   };
 
   const normalizedColor = color.toLowerCase().trim();
@@ -119,7 +119,10 @@ async function generateInternalId(brand: string, model: string, year: number, co
   const modelAbbr = generateModelAbbreviation(model);
   const colorAbbr = generateColorAbbreviation(color);
   
-  const baseInternalId = `${brandAbbr}${modelAbbr}${year}${colorAbbr}`;
+  // Utiliza apenas os 2 últimos dígitos do ano
+  const yearAbbr = year.toString().slice(-2);
+  
+  const baseInternalId = `${brandAbbr}${modelAbbr}${yearAbbr}${colorAbbr}`;
   const sequence = await generateSequence();
   
   return `${baseInternalId}${sequence}`;

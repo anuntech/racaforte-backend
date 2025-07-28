@@ -1368,4 +1368,56 @@ export async function processPart(
       }
     });
   }
+}
+
+export async function searchPartsByName(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  try {
+    const query = request.query as { name?: string };
+    const { name } = query;
+
+    // Validação do parâmetro de busca
+    if (!name || typeof name !== 'string' || name.trim().length === 0) {
+      return reply.status(400).send({
+        success: false,
+        error: {
+          type: 'validation_error',
+          message: 'Parâmetro de busca "name" é obrigatório e deve ser uma string não vazia.'
+        }
+      });
+    }
+
+    // Chama o service para buscar as peças
+    const result = await partService.searchPartsByName(name.trim());
+
+    // Verifica se houve erro no service
+    if (typeof result === 'object' && 'error' in result) {
+      return reply.status(500).send({
+        success: false,
+        error: {
+          type: result.error,
+          message: result.message
+        }
+      });
+    }
+
+    // Resposta de sucesso
+    return reply.status(200).send({
+      success: true,
+      data: result
+    });
+
+  } catch (error) {
+    console.error('Erro no controller searchPartsByName:', error);
+    
+    return reply.status(500).send({
+      success: false,
+      error: {
+        type: 'server_error',
+        message: 'Erro interno do servidor. Tente novamente.'
+      }
+    });
+  }
 } 
