@@ -7,14 +7,14 @@ export async function imageRoutes(app: FastifyInstance) {
   await app.register(import('@fastify/multipart'), {
     limits: {
       fileSize: 52428800, // 50MB
-      files: 5, // Máximo 5 arquivos
+      files: 10, // Máximo 10 arquivos
     },
     attachFieldsToBody: false, // Importante para saveRequestFiles
   });
 
-  app.post('/upload-images', {
+  app.post('/images/remove-background', {
     schema: {
-      description: 'Upload up to 5 images to identify automotive parts using AI',
+      description: 'Remove o fundo de até 10 imagens usando remove.bg',
       tags: ['Image Processing'],
       consumes: ['multipart/form-data'],
       response: {
@@ -25,8 +25,20 @@ export async function imageRoutes(app: FastifyInstance) {
             data: {
               type: 'object',
               properties: {
-                name: { type: 'string' },
-                description: { type: 'string' }
+                processed_images: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Imagens processadas em base64 (com fundo removido)'
+                },
+                processing_info: {
+                  type: 'object',
+                  properties: {
+                    total_images: { type: 'number' },
+                    successful_removals: { type: 'number' },
+                    failed_removals: { type: 'number' },
+                    processing_time_ms: { type: 'number' }
+                  }
+                }
               }
             }
           }
@@ -46,5 +58,5 @@ export async function imageRoutes(app: FastifyInstance) {
         }
       }
     }
-  }, imageController.uploadImages);
+  }, imageController.removeBackground);
 } 

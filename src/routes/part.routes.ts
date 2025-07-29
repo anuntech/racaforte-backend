@@ -481,9 +481,18 @@ export async function partRoutes(app: FastifyInstance) {
 
   app.post('/part/process', {
     schema: {
-      description: 'Processar e gerar dados completos da peça usando IA',
+      description: 'Processar e gerar dados completos da peça usando IA (apenas dados, sem imagens)',
       tags: ['Part Management'],
-      consumes: ['multipart/form-data'],
+      consumes: ['application/json'],
+      body: {
+        type: 'object',
+        required: ['name', 'description', 'vehicle_internal_id'],
+        properties: {
+          name: { type: 'string', description: 'Nome da peça' },
+          description: { type: 'string', description: 'Descrição da peça' },
+          vehicle_internal_id: { type: 'string', description: 'ID interno do veículo' }
+        }
+      },
       response: {
         200: {
           type: 'object',
@@ -492,11 +501,6 @@ export async function partRoutes(app: FastifyInstance) {
             data: {
               type: 'object',
               properties: {
-                processed_images: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  description: 'Imagens processadas em base64 (com fundo removido)'
-                },
                 ad_title: {
                   type: 'string',
                   description: 'Título otimizado para anúncio'

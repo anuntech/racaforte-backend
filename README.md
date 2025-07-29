@@ -11,7 +11,7 @@ Backend da aplicação **Raca Forte**, construído com **Fastify**, **TypeScript
 - 💾 [Prisma ORM](https://www.prisma.io/) — ORM de próxima geração para Node.js e TypeScript
 - 🐬 [MySQL 8.0](https://www.mysql.com/) — Banco de dados relacional
 - 🗂️ [Zod](https://zod.dev/) — Validação de schemas tipada
-- 🤖 [OpenAI API](https://openai.com/) — Identificação de peças automotivas e sugestão de preços por IA
+- 🤖 [Google Gemini AI](https://ai.google.dev/) — Identificação de peças automotivas e sugestão de preços por IA
 - ☁️ [AWS SDK S3](https://docs.aws.amazon.com/sdk-for-javascript/) — Armazenamento de arquivos
 - 🐳 Docker — Banco em container isolado
 - 🚀 [Biome](https://biomejs.dev/) — Formatter + Linter + Organizador de imports (feito em Rust)
@@ -32,8 +32,8 @@ Crie um arquivo `.env` na raiz do projeto:
 # Database
 DATABASE_URL="mysql://racaforte_user:racaforte_password@localhost:3306/racaforte_db"
 
-# OpenAI
-OPENAI_API_KEY=sk-sua-chave-da-openai
+# Google Gemini AI
+GEMINI_API_KEY=sua-chave-do-gemini
 
 # Server Configuration
 HOST=0.0.0.0
@@ -191,22 +191,25 @@ GET /health
 }
 ```
 
-### 🤖 Upload de Imagens para Identificação de Peças
+
+
+### 🎨 Remoção de Fundo de Imagens
 
 ```http
-POST /upload-images
+POST /images/remove-background
 Content-Type: multipart/form-data
 ```
 
 **Especificações:**
-- ✅ Máximo: 5 imagens por requisição
+- ✅ Máximo: 10 imagens por requisição
 - ✅ Formatos: JPEG, JPG, PNG, WEBP
 - ✅ Tamanho máximo: 50MB por arquivo
-- ✅ IA: OpenAI GPT-4o-mini
+- ✅ API: Remove.bg
+- ✅ Fallback para imagem original em caso de erro
 
 **Exemplo com cURL:**
 ```bash
-curl -X POST http://localhost:3333/upload-images \
+curl -X POST http://localhost:3333/images/remove-background \
   -F "imagem1=@./para-choque-frente.jpg" \
   -F "imagem2=@./para-choque-lado.png"
 ```
@@ -216,8 +219,13 @@ curl -X POST http://localhost:3333/upload-images \
 {
   "success": true,
   "data": {
-    "name": "Para-choque Dianteiro",
-    "description": "Para-choque dianteiro automotivo..."
+    "processed_images": ["data:image/png;base64,..."],
+    "processing_info": {
+      "total_images": 2,
+      "successful_removals": 2,
+      "failed_removals": 0,
+      "processing_time_ms": 3500
+    }
   }
 }
 ```
@@ -226,27 +234,40 @@ curl -X POST http://localhost:3333/upload-images \
 
 ```http
 POST /part/process
-Content-Type: multipart/form-data
+Content-Type: application/json
 ```
 
 **Especificações:**
-- ✅ Máximo: 5 imagens por requisição
+- ✅ Apenas dados textuais (SEM imagens para máxima performance)
 - ✅ Gera: título, descrição, dimensões, peso, compatibilidade e **preços**
-- ✅ IA: OpenAI GPT-4o-mini especializada em precificação
-- ✅ Remove fundo das imagens automaticamente
+- ✅ IA: Google Gemini 2.5 Flash especializada em precificação
+- ✅ Super rápido (baseado apenas em nome, descrição e veículo)
 
 **Campos obrigatórios:**
-- `name`: Nome da peça
-- `description`: Descrição da peça  
-- `vehicle_internal_id`: ID do veículo
-- `images`: Arquivos de imagem
+```json
+{
+  "name": "Nome da peça",
+  "description": "Descrição da peça", 
+  "vehicle_internal_id": "ID do veículo"
+}
+```
+
+**Exemplo com cURL:**
+```bash
+curl -X POST http://localhost:3333/part/process \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Alternador",
+    "description": "Alternador 70A 12V em bom estado",
+    "vehicle_internal_id": "123e4567-e89b-12d3-a456-426614174000"
+  }'
+```
 
 **Resposta de Sucesso:**
 ```json
 {
   "success": true,
   "data": {
-    "processed_images": ["data:image/png;base64,..."],
     "ad_title": "Alternador Toyota Corolla 2020 - Excelente Estado",
     "ad_description": "Alternador original em perfeito estado...",
     "dimensions": {
@@ -272,13 +293,15 @@ Content-Type: multipart/form-data
 }
 ```
 
+**Nota:** Este endpoint foca apenas em dados. Para processamento de imagens, use `/images/remove-background` separadamente.
+
 **Erros Comuns:**
 ```json
 {
   "success": false,
   "error": {
     "type": "too_many_files",
-    "message": "Máximo de 5 imagens permitidas."
+    "message": "Máximo de 10 imagens permitidas."
   }
 }
 ```
@@ -312,7 +335,8 @@ npm run db:reset
   ├── lib/           # Serviços externos (Prisma, S3, etc.)
   ├── routes/        # Rotas da API
   ├── controllers/   # Controllers
-  ├── services/      # Serviços (OpenAI, Image processing)
+  ├── services/      # Serviços (Gemini AI, Storage, Background removal)
+  ├── prompts/       # Templates de prompts para IA
   ├── schemas/       # Schemas de validação (Zod)
   ├── server.ts      # Ponto de entrada da aplicação
 /prisma
@@ -357,7 +381,8 @@ npm run dev
 
 ### 🌐 Endpoints disponíveis:
 - **Health Check**: http://localhost:3333/health
-- **Upload Imagens**: http://localhost:3333/upload-images
+- **Processar Peças**: http://localhost:3333/part/process
+- **Remover Fundo**: http://localhost:3333/images/remove-background
 - **Prisma Studio**: http://localhost:5555 (com `npm run prisma:studio`)
 
 ---
@@ -381,15 +406,15 @@ npm run format
 Os logs estão em português e são bem detalhados:
 
 ```
-✅ Chave OpenAI encontrada, inicializando...
+✅ Chave Gemini encontrada, inicializando...
 📁 Processando 3 arquivos:
   Arquivo 1: para-choque.jpg (image/jpeg)
 📏 Arquivo para-choque.jpg: 245760 bytes
 🔄 Convertido para base64 (327680 caracteres)
 🚀 Enviando para o serviço de IA...
 Iniciando análise de 3 imagens
-📡 Enviando requisição para OpenAI...
-📥 Resposta OpenAI recebida
+📡 Enviando requisição para Gemini...
+📥 Resposta Gemini recebida
 ✅ Identificação bem-sucedida
 ```
 
@@ -399,7 +424,7 @@ Iniciando análise de 3 imagens
 
 - 🌐 [Documentação do Fastify](https://www.fastify.dev/docs/latest/)
 - 📚 [Documentação do Prisma](https://www.prisma.io/docs/)
-- 🤖 [OpenAI Platform](https://platform.openai.com/)
+- 🤖 [Google AI Studio](https://aistudio.google.com/)
 - 🐳 [Documentação do Docker](https://docs.docker.com/)
 - 🔧 [Documentação do Biome](https://biomejs.dev/)
 - ☁️ [Documentação AWS S3](https://docs.aws.amazon.com/AmazonS3/)
