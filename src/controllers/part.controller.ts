@@ -4,6 +4,7 @@ import * as partService from '../services/part.service';
 import { CreatePartSchema, UpdatePartSchema, ProcessPartSchema } from '../schemas/part.schema';
 import type { PartResponse, UpdatePartResponse, DeletePartResponse, ProcessPartResponse } from '../schemas/part.schema';
 import * as geminiService from '../services/gemini.service';
+import { generateStandardAdTitle } from '../utils/title-generator';
 import * as storageService from '../services/storage.service';
 import { PrismaClient } from '../../generated/prisma';
 
@@ -850,6 +851,17 @@ export async function processPart(
 
     console.log('✅ Processamento IA concluído com sucesso');
     console.log('✅ DEBUG - ETAPA 3/3 COMPLETA: IA processada');
+    console.log('🔄 DEBUG - Gerando título padronizado...');
+
+    // Gera título padronizado seguindo o padrão do site
+    const standardTitle = generateStandardAdTitle(
+      validationResult.data.name,
+      vehicle.brand,
+      vehicle.model,
+      aiResult.compatibility
+    );
+    
+    console.log('📝 DEBUG - Título padronizado:', standardTitle);
 
     // DEBUG: Análise da resposta final
     const totalTime = Date.now() - startTime;
@@ -863,11 +875,11 @@ export async function processPart(
     console.log(`✅ Processamento de dados completo em ${totalTime}ms`);
     console.log('🎉 DEBUG - Processamento concluído com sucesso!');
 
-    // Resposta de sucesso (sem processed_images)
+    // Resposta de sucesso (com título padronizado)
     return reply.status(200).send({
       success: true,
       data: {
-        ad_title: aiResult.ad_title,
+        ad_title: standardTitle, // Usando título padronizado ao invés do da IA
         ad_description: aiResult.ad_description,
         dimensions: aiResult.dimensions,
         weight: aiResult.weight,

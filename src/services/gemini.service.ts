@@ -8,7 +8,6 @@ interface ProcessingError {
 }
 
 interface PartProcessingWithPrices {
-  ad_title: string;
   ad_description: string;
   dimensions: {
     width: string;
@@ -206,13 +205,12 @@ export async function processPartWithGemini(
       console.log('✅ DEBUG - Parse do JSON bem-sucedido');
       
       // Validação básica da estrutura
-      if (!parsedResponse.ad_title || !parsedResponse.ad_description) {
+      if (!parsedResponse.ad_description) {
         throw new Error('Estrutura JSON inválida - campos obrigatórios ausentes');
       }
 
-      // DEBUG: Log dos campos principais
-          console.log('📋 DEBUG - Título gerado:', parsedResponse.ad_title);
-    console.log('📋 DEBUG - Peso estimado:', parsedResponse.weight, 'kg');
+            // DEBUG: Log dos campos principais
+      console.log('📋 DEBUG - Peso estimado:', parsedResponse.weight, 'kg');
               console.log('📋 DEBUG - Veículos compatíveis:', parsedResponse.compatibility?.length || 0);
       
                     console.log('💰 DEBUG - Preços: R$' + parsedResponse.prices.min_price + ' - R$' + parsedResponse.prices.max_price);
@@ -345,12 +343,11 @@ export async function processPartDataWithGemini(
       console.log('✅ DEBUG - Parse do JSON bem-sucedido');
       
       // Validação básica da estrutura
-      if (!parsedResponse.ad_title || !parsedResponse.ad_description) {
+      if (!parsedResponse.ad_description) {
         throw new Error('Estrutura JSON inválida - campos obrigatórios ausentes');
       }
 
       // DEBUG: Log dos campos principais
-      console.log('📋 DEBUG - Título gerado:', parsedResponse.ad_title);
       console.log('📋 DEBUG - Peso estimado:', parsedResponse.weight, 'kg');
       console.log('📋 DEBUG - Veículos compatíveis:', parsedResponse.compatibility?.length || 0);
       
