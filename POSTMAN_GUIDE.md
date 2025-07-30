@@ -38,6 +38,14 @@ User-Agent: PostmanRuntime/7.0.0
 }
 ```
 
+**📌 Nota:** O campo `description` é **opcional**. Você pode enviar apenas:
+```json
+{
+  "name": "Alternador",
+  "vehicle_internal_id": "123e4567-e89b-12d3-a456-426614174000"
+}
+```
+
 ### 🎯 Exemplos de Teste
 
 #### Teste 1: Alternador Toyota

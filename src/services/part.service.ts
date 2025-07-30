@@ -73,7 +73,7 @@ export async function createPart(
     const part = await prisma.part.create({
       data: {
         name: partData.name,
-        description: partData.description,
+        description: partData.description || '',
         condition: partData.condition,
         stock_address: partData.stock_address,
         dimensions: partData.dimensions || undefined,

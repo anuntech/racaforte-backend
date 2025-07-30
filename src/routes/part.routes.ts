@@ -486,10 +486,10 @@ export async function partRoutes(app: FastifyInstance) {
       consumes: ['application/json'],
       body: {
         type: 'object',
-        required: ['name', 'description', 'vehicle_internal_id'],
+        required: ['name', 'vehicle_internal_id'],
         properties: {
           name: { type: 'string', description: 'Nome da peça' },
-          description: { type: 'string', description: 'Descrição da peça' },
+          description: { type: 'string', description: 'Descrição da peça (opcional)' },
           vehicle_internal_id: { type: 'string', description: 'ID interno do veículo' }
         }
       },

@@ -71,13 +71,22 @@ function generateBrandAbbreviation(brand: string): string {
   };
 
   const normalizedBrand = brand.toLowerCase().trim();
-  return brandMap[normalizedBrand] || brand.substring(0, 2).toUpperCase();
+  return brandMap[normalizedBrand] || brand
+    .normalize('NFD')                     // Remove acentos antes de abreviar
+    .replace(/\u0300-\u036f/g, '')        // Remove diacríticos
+    .substring(0, 2)
+    .toUpperCase();
 }
 
 function generateModelAbbreviation(model: string): string {
-  // Remove espaços e caracteres especiais, pega as primeiras 3 letras/números
-  const cleanModel = model.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-  return cleanModel.substring(0, 3) || 'MOD';
+  // Remove acentos e normaliza, depois remove apenas espaços e símbolos, mantendo letras
+  const withoutAccents = model
+    .normalize('NFD')                     // Decompõe acentos
+    .replace(/\u0300-\u036f/g, '')        // Remove apenas os acentos
+    .replace(/[^a-zA-Z0-9]/g, '')         // Remove espaços e símbolos
+    .toUpperCase();
+  
+  return withoutAccents.substring(0, 3) || 'MOD';
 }
 
 // Gera abreviação da cor com 2 caracteres (preto=pr, prata=pt, outras=primeiras 2 letras)
@@ -100,15 +109,34 @@ function generateColorAbbreviation(color: string): string {
   };
 
   const normalizedColor = color.toLowerCase().trim();
-  return colorMap[normalizedColor] || color.substring(0, 2).toUpperCase();
+  return colorMap[normalizedColor] || color
+    .normalize('NFD')                     // Remove acentos antes de abreviar
+    .replace(/\u0300-\u036f/g, '')        // Remove diacríticos
+    .substring(0, 2)
+    .toUpperCase();
 }
 
 async function generateSequence(): Promise<string> {
-  // Conta todos os carros no banco de dados para obter a próxima sequência
-  const carCount = await prisma.car.count();
+  // Busca a maior sequência existente nos internal_ids
+  const cars = await prisma.car.findMany({
+    select: { internal_id: true }
+  });
   
-  // Adiciona 1 ao total de carros para gerar a próxima sequência
-  const nextSequence = carCount + 1;
+  let maxSequence = 0;
+  
+  // Extrai a sequência (últimos 3 dígitos) de cada internal_id
+  for (const car of cars) {
+    const sequenceMatch = car.internal_id.match(/(\d{3})$/);
+    if (sequenceMatch) {
+      const sequence = Number.parseInt(sequenceMatch[1], 10);
+      if (sequence > maxSequence) {
+        maxSequence = sequence;
+      }
+    }
+  }
+  
+  // Próxima sequência = maior sequência + 1
+  const nextSequence = maxSequence + 1;
 
   // Formata com 3 dígitos (001, 002, etc.)
   return nextSequence.toString().padStart(3, '0');

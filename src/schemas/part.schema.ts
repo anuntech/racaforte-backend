@@ -23,7 +23,7 @@ export const CompatibilitySchema = z.array(z.object({
 // Schema para criar uma nova peça
 export const CreatePartSchema = z.object({
   name: z.string().min(1, 'Nome é obrigatório').trim(),
-  description: z.string().min(1, 'Descrição é obrigatória').trim(),
+  description: z.string().trim().optional(),
   condition: PartConditionSchema,
   stock_address: z.string().min(1, 'Endereço do estoque é obrigatório').trim(),
   dimensions: DimensionsSchema,
@@ -193,7 +193,7 @@ export const AllPartsResponseSchema = z.object({
 // Schema para processamento de peças com IA
 export const ProcessPartSchema = z.object({
   name: z.string().min(1, 'Nome da peça é obrigatório').trim(),
-  description: z.string().min(1, 'Descrição da peça é obrigatória').trim(),
+  description: z.string().trim().optional(),
   vehicle_internal_id: z.string().min(1, 'ID interno do veículo é obrigatório').trim(),
 });
 

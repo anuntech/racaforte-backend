@@ -247,8 +247,14 @@ Content-Type: application/json
 ```json
 {
   "name": "Nome da peça",
-  "description": "Descrição da peça", 
   "vehicle_internal_id": "ID do veículo"
+}
+```
+
+**Campos opcionais:**
+```json
+{
+  "description": "Descrição da peça"
 }
 ```
 

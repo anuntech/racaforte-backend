@@ -98,7 +98,7 @@ export async function processPartWithGemini(
   console.log(`📸 Processando ${dataUrls.length} imagens`);
 
   // DEBUG: Análise detalhada das imagens para IA
-  console.log(`🔍 DEBUG - Análise das imagens para Gemini:`);
+  console.log('🔍 DEBUG - Análise das imagens para Gemini:');
   let totalPayloadSize = 0;
   
   dataUrls.forEach((url, index) => {
@@ -213,7 +213,7 @@ export async function processPartWithGemini(
       console.log('📋 DEBUG - Peso estimado:', parsedResponse.weight, 'kg');
               console.log('📋 DEBUG - Veículos compatíveis:', parsedResponse.compatibility?.length || 0);
       
-                    console.log('💰 DEBUG - Preços: R$' + parsedResponse.prices.min_price + ' - R$' + parsedResponse.prices.max_price);
+                    console.log(`💰 DEBUG - Preços: R$${parsedResponse.prices.min_price} - R$${parsedResponse.prices.max_price}`);
 
     } catch (parseError) {
       console.error('❌ DEBUG - Erro ao fazer parse da resposta Gemini:', parseError);
@@ -257,7 +257,7 @@ export async function processPartWithGemini(
  */
 export async function processPartDataWithGemini(
   partName: string,
-  partDescription: string,
+  partDescription: string | undefined,
   vehicleBrand: string,
   vehicleModel: string,
   vehicleYear: number
@@ -268,7 +268,7 @@ export async function processPartDataWithGemini(
   
   console.log(`🤖 Iniciando processamento de dados da peça com Gemini: ${partName}`);
   console.log(`🚗 Veículo: ${vehicleBrand} ${vehicleModel} ${vehicleYear}`);
-  console.log(`📝 Processamento apenas textual (sem imagens)`);
+  console.log('📝 Processamento apenas textual (sem imagens)');
 
   try {
     // Configuração de timeout
