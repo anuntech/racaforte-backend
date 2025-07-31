@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { buildPartProcessingPrompt } from '../prompts/part-processing.prompts';
+import { buildPartProcessingPrompt } from '../prompts/part-processing.prompts.js';
 
 // Tipos para compatibilidade com o sistema existente
 interface ProcessingError {

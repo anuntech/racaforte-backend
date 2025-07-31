@@ -1,5 +1,5 @@
-import { PrismaClient } from '../../generated/prisma';
-import type { CreateCarRequest, UpdateCarRequest } from '../schemas/car.schema';
+import { PrismaClient } from '../../generated/prisma/index.js';
+import type { CreateCarRequest, UpdateCarRequest } from '../schemas/car.schema.js';
 
 interface CarCreationResult {
   id: string;

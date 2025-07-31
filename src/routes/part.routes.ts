@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import * as partController from '../controllers/part.controller';
+import * as partController from '../controllers/part.controller.js';
 
 export async function partRoutes(app: FastifyInstance) {
   // Registra suporte a multipart para esta rota com configurações otimizadas para iOS/Expo/React Native

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import * as carController from '../controllers/car.controller';
+import * as carController from '../controllers/car.controller.js';
 
 export async function carRoutes(app: FastifyInstance) {
 

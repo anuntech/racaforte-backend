@@ -1,7 +1,7 @@
-import { PrismaClient } from '../../generated/prisma';
-import type { CreatePartRequest, UpdatePartRequest } from '../schemas/part.schema';
-import type { UploadResult, StorageError } from './storage.service';
-import { processAndUploadMultipleImages, deleteMultipleImagesFromS3 } from './storage.service';
+import { PrismaClient } from '../../generated/prisma/index.js';
+import type { CreatePartRequest, UpdatePartRequest } from '../schemas/part.schema.js';
+import type { UploadResult, StorageError } from './storage.service.js';
+import { processAndUploadMultipleImages, deleteMultipleImagesFromS3 } from './storage.service.js';
 
 const prisma = new PrismaClient();
 

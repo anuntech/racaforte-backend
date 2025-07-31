@@ -1,7 +1,7 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
-import * as carService from '../services/car.service';
+import * as carService from '../services/car.service.js';
 import type { CreateCarRequest, UpdateCarRequest, CarParams, CarResponse, CarDetailsResponse, DeleteResponse, InternalIdsResponse, AllCarsResponse, GenerateInternalIdRequest, GenerateInternalIdResponse, CarPartsResponse } from '../schemas/car.schema';
-import { CreateCarSchema, UpdateCarSchema, CarParamsSchema, GenerateInternalIdSchema } from '../schemas/car.schema';
+import { CreateCarSchema, UpdateCarSchema, CarParamsSchema, GenerateInternalIdSchema } from '../schemas/car.schema.js';
 
 export async function createCar(request: FastifyRequest, reply: FastifyReply): Promise<CarResponse> {
   try {

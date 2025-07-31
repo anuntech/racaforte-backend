@@ -1,7 +1,7 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import * as storageService from '../services/storage.service';
+import * as storageService from '../services/storage.service.js';
 
 interface BackgroundRemovalResponse {
   success: boolean;

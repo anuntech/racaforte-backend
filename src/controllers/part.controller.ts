@@ -1,12 +1,12 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import type { MultipartFile } from '@fastify/multipart';
-import * as partService from '../services/part.service';
-import { CreatePartSchema, UpdatePartSchema, ProcessPartSchema } from '../schemas/part.schema';
-import type { PartResponse, UpdatePartResponse, DeletePartResponse, ProcessPartResponse } from '../schemas/part.schema';
-import * as geminiService from '../services/gemini.service';
-import { generateStandardAdTitle } from '../utils/title-generator';
-import * as storageService from '../services/storage.service';
-import { PrismaClient } from '../../generated/prisma';
+import * as partService from '../services/part.service.js';
+import { CreatePartSchema, UpdatePartSchema, ProcessPartSchema } from '../schemas/part.schema.js';
+import type { PartResponse, UpdatePartResponse, DeletePartResponse, ProcessPartResponse } from '../schemas/part.schema.js';
+import * as geminiService from '../services/gemini.service.js';
+import { generateStandardAdTitle } from '../utils/title-generator.js';
+import * as storageService from '../services/storage.service.js';
+import { PrismaClient } from '../../generated/prisma/index.js';
 
 interface FormFields {
   name?: string;

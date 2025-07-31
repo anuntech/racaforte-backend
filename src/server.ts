@@ -1,10 +1,10 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { config } from 'dotenv';
-import { healthRoutes } from './routes/health';
-import { imageRoutes } from './routes/image.routes';
-import { carRoutes } from './routes/car.routes';
-import { partRoutes } from './routes/part.routes';
+import { healthRoutes } from './routes/health.js';
+import { imageRoutes } from './routes/image.routes.js';
+import { carRoutes } from './routes/car.routes.js';
+import { partRoutes } from './routes/part.routes.js';
 
 config();
 

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import * as imageController from '../controllers/image.controller';
+import * as imageController from '../controllers/image.controller.js';
 
 export async function imageRoutes(app: FastifyInstance) {
 
