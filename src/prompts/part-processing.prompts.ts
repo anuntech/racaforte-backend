@@ -17,9 +17,9 @@ Retorne JSON:
   },
   "ad_description": "descrição da peça para anúncio",
   "dimensions": {
-    "width": "largura cm",
-    "height": "altura cm", 
-    "depth": "profundidade cm",
+    "width": "largura (integer number)",
+    "height": "altura (integer number)", 
+    "depth": "profundidade (integer number)}",
     "unit": "cm"
   },
   "weight": peso_numero,

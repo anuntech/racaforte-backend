@@ -253,22 +253,8 @@ export async function updateCar(identifier: string, updateData: UpdateCarRequest
       color: updateData.color || existingCar.color,
     };
 
-    // Gera novo internal_id se algum campo relevante foi alterado
-    let newInternalId = existingCar.internal_id;
-    const fieldsChanged = 
-      updateData.brand !== undefined ||
-      updateData.model !== undefined ||
-      updateData.year !== undefined ||
-      updateData.color !== undefined;
-
-    if (fieldsChanged) {
-      newInternalId = await generateInternalId(
-        mergedData.brand,
-        mergedData.model,
-        mergedData.year,
-        mergedData.color
-      );
-    }
+    // NUNCA regenera o internal_id durante edições - sempre mantém o existente
+    const newInternalId = existingCar.internal_id;
 
     // Atualiza o carro no banco de dados
     const updatedCar = await prisma.car.update({
