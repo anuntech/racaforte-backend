@@ -81,9 +81,9 @@ export async function createPart(
     console.log('🔄 Processando multipart/form-data...');
     let partCount = 0;
     
-    // Timeout específico para clientes mobile (mesmo que processPart)
-    const MOBILE_PART_TIMEOUT = isMobileClient ? 10000 : 20000; // 10s para mobile, 20s para outros
-    const MOBILE_BUFFER_TIMEOUT = isMobileClient ? 15000 : 20000; // 15s para mobile, 20s para outros
+    // Timeout específico para clientes mobile (mesmo que processPart) - Aumentado para produção
+    const MOBILE_PART_TIMEOUT = isMobileClient ? 30000 : 60000; // 30s para mobile, 60s para outros
+    const MOBILE_BUFFER_TIMEOUT = isMobileClient ? 60000 : 90000; // 60s para mobile, 90s para outros
     
     console.log(`⚙️ DEBUG - Timeouts createPart configurados para cliente mobile: ${isMobileClient}`);
     console.log(`   Part timeout: ${MOBILE_PART_TIMEOUT}ms`);
@@ -154,8 +154,8 @@ export async function createPart(
         }
       })();
       
-      // Timeout específico para o processamento multipart completo
-      const multipartTimeout = isMobileClient ? 30000 : 60000; // 30s para mobile, 60s para outros
+      // Timeout específico para o processamento multipart completo - Aumentado para produção
+      const multipartTimeout = isMobileClient ? 120000 : 180000; // 120s para mobile, 180s para outros
       const multipartTimeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(() => reject(new Error('Multipart timeout')), multipartTimeout);
       });
