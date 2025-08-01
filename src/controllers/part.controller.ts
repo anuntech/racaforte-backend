@@ -109,6 +109,8 @@ export async function createPart(
               encoding: part.encoding
             });
             
+            console.log(`🔍 DEBUG - Verificando tipo de cliente: isMobileClient = ${isMobileClient}`);
+            
             // Para clientes mobile, processa o arquivo imediatamente para evitar timeout
             if (isMobileClient) {
               console.log(`📱 DEBUG - Cliente mobile detectado: processamento otimizado para ${part.filename}`);
@@ -118,16 +120,20 @@ export async function createPart(
                 console.log(`💾 DEBUG - Iniciando leitura buffer otimizada para mobile...`);
                 const bufferStartTime = Date.now();
                 
+                console.log(`⏱️ DEBUG - Criando promise de buffer...`);
                 const bufferPromise = part.toBuffer();
                 const bufferTimeoutPromise = new Promise<never>((_, reject) => {
                   setTimeout(() => reject(new Error('Mobile buffer timeout')), MOBILE_BUFFER_TIMEOUT);
                 });
                 
+                console.log(`🏁 DEBUG - Iniciando Promise.race com timeout de ${MOBILE_BUFFER_TIMEOUT}ms...`);
                 const buffer = await Promise.race([bufferPromise, bufferTimeoutPromise]);
                 const bufferTime = Date.now() - bufferStartTime;
+                console.log(`🎯 DEBUG - Promise.race concluído em ${bufferTime}ms`);
                 
                 console.log(`✅ DEBUG - Buffer mobile lido em ${bufferTime}ms, tamanho: ${buffer.length} bytes`);
                 
+                console.log(`🏗️ DEBUG - Criando processedFile para mobile...`);
                 // Criar um objeto que simula o MultipartFile para compatibilidade
                 const processedFile = {
                   ...part,
@@ -135,23 +141,36 @@ export async function createPart(
                   async toBuffer() { return buffer; }
                 };
                 
+                console.log(`📋 DEBUG - Adicionando arquivo mobile ao array files...`);
                 files.push(processedFile as MultipartFile);
+                console.log(`✅ DEBUG - Arquivo mobile adicionado com sucesso. Total de arquivos: ${files.length}`);
                 
               } catch (error) {
                 console.error(`❌ DEBUG - Erro ao ler buffer mobile para ${part.filename}:`, error);
                 throw error;
               }
             } else {
+              console.log(`🖥️ DEBUG - Cliente não-mobile detectado: adicionando arquivo diretamente`);
               // Para outros clientes, adiciona normalmente
               files.push(part);
+              console.log(`✅ DEBUG - Arquivo não-mobile adicionado. Total de arquivos: ${files.length}`);
             }
+            
+            console.log(`🔚 DEBUG - Finalizando processamento do arquivo ${part.filename}`);
+          } else {
+            console.log(`❓ DEBUG - Part não é field nem file: ${JSON.stringify(part)}`);
           }
           
           // Log de progresso para manter conexão viva
           if (partCount % 3 === 0) { // Mais frequente para mobile
             console.log(`📦 Processadas ${partCount} partes...`);
           }
+          
+          console.log(`➡️ DEBUG - Finalizada parte ${partCount}, indo para próxima...`);
         }
+        
+        console.log(`🏁 DEBUG - Loop multipart finalizado. Total de partes processadas: ${partCount}`);
+        console.log(`📊 DEBUG - Resumo: ${Object.keys(fields).length} campos, ${files.length} arquivos`);
       })();
       
       // Timeout específico para o processamento multipart completo - Aumentado para produção
