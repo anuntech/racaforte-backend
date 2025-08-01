@@ -39,22 +39,24 @@ export async function createPart(
     const contentType = request.headers['content-type'] || 'unknown';
     const contentLength = request.headers['content-length'] || 'unknown';
     
-    // Detecção melhorada para iOS/Expo/React Native (mesmo que processPart)
+    // Detecção melhorada para iOS/Android/Expo/React Native (mesmo que processPart)
     const isIOS = userAgent.toLowerCase().includes('ios') || 
                   userAgent.toLowerCase().includes('iphone') || 
                   userAgent.toLowerCase().includes('ipad');
+    const isAndroid = userAgent.toLowerCase().includes('android');
     const isExpo = userAgent.includes('Expo/') || userAgent.includes('CFNetwork');
     const isReactNative = userAgent.includes('React Native') || isExpo;
     const isDarwin = userAgent.includes('Darwin/');
     
-    // Considera iOS se for qualquer um destes
-    const isMobileClient = isIOS || isExpo || isReactNative || isDarwin;
+    // Considera mobile se for qualquer um destes
+    const isMobileClient = isIOS || isAndroid || isExpo || isReactNative || isDarwin;
     
     console.log('📱 DEBUG - Informações da requisição createPart:');
     console.log(`   User-Agent: ${userAgent}`);
     console.log(`   Content-Type: ${contentType}`);
     console.log(`   Content-Length: ${contentLength}`);
     console.log(`   iOS nativo detectado: ${isIOS}`);
+    console.log(`   Android detectado: ${isAndroid}`);
     console.log(`   Expo detectado: ${isExpo}`);
     console.log(`   React Native detectado: ${isReactNative}`);
     console.log(`   Darwin detectado: ${isDarwin}`);
