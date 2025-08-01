@@ -39,28 +39,30 @@ export async function createPart(
     const contentType = request.headers['content-type'] || 'unknown';
     const contentLength = request.headers['content-length'] || 'unknown';
     
-    // Detecção melhorada para iOS/Android/Expo/React Native (mesmo que processPart)
+    // Detecção simplificada: se não é desktop/servidor, é mobile
     const isIOS = userAgent.toLowerCase().includes('ios') || 
                   userAgent.toLowerCase().includes('iphone') || 
                   userAgent.toLowerCase().includes('ipad');
-    const isAndroid = userAgent.toLowerCase().includes('android');
-    const isExpo = userAgent.includes('Expo/') || userAgent.includes('CFNetwork');
-    const isReactNative = userAgent.includes('React Native') || isExpo;
-    const isDarwin = userAgent.includes('Darwin/');
+    const isDesktop = userAgent.toLowerCase().includes('windows') || 
+                      userAgent.toLowerCase().includes('linux') || 
+                      userAgent.toLowerCase().includes('macintosh') ||
+                      userAgent.toLowerCase().includes('x11');
+    const isServer = userAgent.toLowerCase().includes('postman') ||
+                     userAgent.toLowerCase().includes('insomnia') ||
+                     userAgent.toLowerCase().includes('curl') ||
+                     userAgent.toLowerCase().includes('wget');
     
-    // Considera mobile se for qualquer um destes
-    const isMobileClient = isIOS || isAndroid || isExpo || isReactNative || isDarwin;
+    // Se não é desktop nem servidor, assume que é mobile (Android/iOS)
+    const isMobileClient = !isDesktop && !isServer;
     
     console.log('📱 DEBUG - Informações da requisição createPart:');
     console.log(`   User-Agent: ${userAgent}`);
     console.log(`   Content-Type: ${contentType}`);
     console.log(`   Content-Length: ${contentLength}`);
-    console.log(`   iOS nativo detectado: ${isIOS}`);
-    console.log(`   Android detectado: ${isAndroid}`);
-    console.log(`   Expo detectado: ${isExpo}`);
-    console.log(`   React Native detectado: ${isReactNative}`);
-    console.log(`   Darwin detectado: ${isDarwin}`);
-    console.log(`   Cliente mobile detectado: ${isMobileClient}`);
+    console.log(`   iOS detectado: ${isIOS}`);
+    console.log(`   Desktop detectado: ${isDesktop}`);
+    console.log(`   Servidor/API tool detectado: ${isServer}`);
+    console.log(`   Cliente mobile detectado: ${isMobileClient} (lógica: !desktop && !server)`);
     
     // Função para verificar timeout específico do iOS
     const checkIOSTimeout = () => {
@@ -183,6 +185,7 @@ export async function createPart(
       
       console.log(`⏱️ DEBUG - Iniciando processamento multipart com timeout de ${multipartTimeout}ms`);
       await Promise.race([multipartPromise, multipartTimeoutPromise]);
+      console.log(`✅ DEBUG - Promise.race do multipart concluído com sucesso!`);
       
     } catch (error) {
       console.error('❌ Erro ao processar multipart data:', error);
@@ -254,9 +257,13 @@ export async function createPart(
 
     console.log('Dados processados:', partData);
 
+    console.log('🔍 DEBUG - Iniciando validação dos dados da peça...');
     // Valida os dados da peça
     const validationResult = CreatePartSchema.safeParse(partData);
+    console.log('🎯 DEBUG - Validação concluída. Sucesso:', validationResult.success);
+    
     if (!validationResult.success) {
+      console.log('❌ DEBUG - Erro de validação:', validationResult.error.errors);
       const firstError = validationResult.error.errors[0];
       return reply.status(400).send({
         success: false,
@@ -267,9 +274,11 @@ export async function createPart(
       });
     }
 
-    console.log('Total de arquivos encontrados:', files.length);
+    console.log('📊 DEBUG - Total de arquivos encontrados:', files.length);
 
+    console.log('🔍 DEBUG - Verificando se tem arquivos...');
     if (files.length === 0) {
+      console.log('❌ DEBUG - Nenhuma imagem encontrada');
       return reply.status(400).send({
         success: false,
         error: {
@@ -280,6 +289,7 @@ export async function createPart(
     }
 
     if (files.length > 5) {
+      console.log('❌ DEBUG - Muitas imagens:', files.length);
       return reply.status(400).send({
         success: false,
         error: {
@@ -289,6 +299,7 @@ export async function createPart(
       });
     }
 
+    console.log('✅ DEBUG - Quantidade de arquivos válida, iniciando processamento de imagens...');
     // Processa os arquivos com otimizações para iOS
     const processedImages = [];
     
@@ -325,13 +336,17 @@ export async function createPart(
           console.log(`📱 DEBUG - Usando buffer pré-carregado para cliente mobile`);
           buffer = (file as any)._buffer;
         } else {
+          console.log(`🖥️ DEBUG - Cliente não-mobile ou sem buffer pré-carregado, chamando file.toBuffer()...`);
+          console.log(`🔍 DEBUG - isMobileClient: ${isMobileClient}, tem _buffer: ${!!(file as any)._buffer}`);
           // Para outros clientes, carrega o buffer normalmente
+          console.log(`⏱️ DEBUG - Iniciando file.toBuffer()...`);
           const bufferPromise = file.toBuffer();
           const bufferTimeoutPromise = new Promise<never>((_, reject) => 
             setTimeout(() => reject(new Error('Timeout na conversão do arquivo')), 30000)
           );
           
           buffer = await Promise.race([bufferPromise, bufferTimeoutPromise]);
+          console.log(`✅ DEBUG - file.toBuffer() concluído com sucesso!`);
         }
         
         const bufferTime = Date.now() - bufferStartTime;
