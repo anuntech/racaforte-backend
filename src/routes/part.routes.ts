@@ -17,7 +17,7 @@ export async function partRoutes(app: FastifyInstance) {
 
   app.post('/part', {
     schema: {
-      description: 'Criar uma nova peça com imagens',
+      description: 'Criar uma nova peça com imagens (upload de arquivos ou URLs S3 diretas)',
       tags: ['Part Management'],
       consumes: ['multipart/form-data'],
       response: {
@@ -478,6 +478,106 @@ export async function partRoutes(app: FastifyInstance) {
       }
     }
   }, partController.deletePart);
+
+  app.post('/part/find', {
+    schema: {
+      description: 'Buscar peça por critérios específicos (vehicle_internal_id, nome e descrição)',
+      tags: ['Part Management'],
+      consumes: ['application/json'],
+      body: {
+        type: 'object',
+        required: ['vehicle_internal_id', 'partName'],
+        properties: {
+          vehicle_internal_id: { type: 'string', description: 'ID interno do veículo' },
+          partName: { type: 'string', description: 'Nome da peça' },
+          partDescription: { type: 'string', description: 'Descrição da peça (opcional)' }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                name: { type: 'string' },
+                description: { type: 'string' },
+                condition: { type: 'string', enum: ['BOA', 'MEDIA', 'RUIM'] },
+                stock_address: { type: 'string' },
+                dimensions: {},
+                weight: { type: 'number' },
+                compatibility: {},
+                min_price: { type: 'number' },
+                suggested_price: { type: 'number' },
+                max_price: { type: 'number' },
+                ad_title: { type: 'string' },
+                ad_description: { type: 'string' },
+                images: {
+                  type: 'array',
+                  items: { type: 'string' }
+                },
+                created_at: { type: 'string' },
+                updated_at: { type: 'string' },
+                car_id: { type: 'string' },
+                car: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string' },
+                    internal_id: { type: 'string' },
+                    brand: { type: 'string' },
+                    model: { type: 'string' },
+                    year: { type: 'integer' },
+                    color: { type: 'string' }
+                  }
+                }
+              }
+            }
+          }
+        },
+        400: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                type: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        404: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                type: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                type: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, partController.searchPartByCriteria);
 
   app.post('/part/process', {
     schema: {

@@ -5,12 +5,12 @@ import { processAndUploadMultipleImages, deleteMultipleImagesFromS3 } from './st
 
 const prisma = new PrismaClient();
 
-interface ServiceError {
+export interface ServiceError {
   error: string;
   message: string;
 }
 
-interface PartCreationResult {
+export interface PartCreationResult {
   id: string;
   name: string;
   images: string[];
@@ -456,6 +456,175 @@ export async function updatePart(
 
   } catch (error) {
     console.error('Erro ao atualizar peça:', error);
+    return {
+      error: 'database_error',
+      message: 'Erro interno do servidor. Tente novamente.'
+    };
+  }
+}
+
+/**
+ * Cria uma nova peça no banco de dados usando URLs S3 diretas (sem upload)
+ */
+export async function createPartWithS3Urls(
+  partData: CreatePartRequest,
+  s3ImageUrls: string[]
+): Promise<PartCreationResult | ServiceError> {
+  try {
+    // Verifica se o carro existe (tenta por ID interno primeiro)
+    const car = await prisma.car.findFirst({
+      where: {
+        OR: [
+          { id: partData.car_id },
+          { internal_id: partData.car_id }
+        ]
+      }
+    });
+
+    if (!car) {
+      return {
+        error: 'car_not_found',
+        message: 'Carro não encontrado.'
+      };
+    }
+
+    // Cria a peça diretamente com as URLs S3 fornecidas
+    const part = await prisma.part.create({
+      data: {
+        name: partData.name,
+        description: partData.description || '',
+        condition: partData.condition,
+        stock_address: partData.stock_address,
+        dimensions: partData.dimensions || undefined,
+        weight: partData.weight || undefined,
+        compatibility: partData.compatibility || undefined,
+        min_price: partData.min_price || undefined,
+        suggested_price: partData.suggested_price || undefined,
+        max_price: partData.max_price || undefined,
+        ad_title: partData.ad_title || undefined,
+        ad_description: partData.ad_description || undefined,
+        car_id: car.id, // Usa o ID interno do carro
+        images: s3ImageUrls, // Usa as URLs S3 diretas
+      },
+      select: {
+        id: true,
+        name: true,
+        images: true,
+      }
+    });
+
+    console.log(`✅ Peça criada com URLs S3 diretas: ${part.id}`);
+
+    // Prepara a resposta
+    const result: PartCreationResult = {
+      id: part.id,
+      name: part.name,
+      images: part.images as string[],
+    };
+
+    return result;
+
+  } catch (error) {
+    console.error('Erro ao criar peça com URLs S3:', error);
+    return {
+      error: 'database_error',
+      message: 'Erro interno do servidor. Tente novamente.'
+    };
+  }
+}
+
+/**
+ * Busca uma peça por critérios específicos (vehicle_internal_id, nome e descrição)
+ */
+export async function searchPartByCriteria(
+  vehicleInternalId: string,
+  partName: string,
+  partDescription?: string
+): Promise<PartDetailsResult | ServiceError> {
+  try {
+    // Busca o carro primeiro
+    const car = await prisma.car.findFirst({
+      where: {
+        OR: [
+          { id: vehicleInternalId },
+          { internal_id: vehicleInternalId }
+        ]
+      }
+    });
+
+    if (!car) {
+      return {
+        error: 'car_not_found',
+        message: 'Veículo não encontrado.'
+      };
+    }
+
+    // Busca a peça com os critérios fornecidos
+    // No MySQL, o 'contains' já é case-insensitive por padrão (dependendo da collation)
+    const whereClause: {
+      car_id: string;
+      name: { contains: string };
+      description?: { contains: string };
+    } = {
+      car_id: car.id,
+      name: {
+        contains: partName
+      }
+    };
+
+    // Se a descrição foi fornecida, adiciona ao filtro
+    if (partDescription && partDescription.trim() !== '') {
+      whereClause.description = {
+        contains: partDescription
+      };
+    }
+
+    const part = await prisma.part.findFirst({
+      where: whereClause,
+      include: {
+        car: {
+          select: {
+            id: true,
+            internal_id: true,
+            brand: true,
+            model: true,
+            year: true,
+            color: true,
+          }
+        }
+      }
+    });
+
+    if (!part) {
+      return {
+        error: 'part_not_found',
+        message: 'Peça não encontrada com os critérios especificados.'
+      };
+    }
+
+    return {
+      id: part.id,
+      name: part.name,
+      description: part.description,
+      condition: part.condition,
+      stock_address: part.stock_address,
+      dimensions: part.dimensions,
+      weight: part.weight ? Number(part.weight) : null,
+      compatibility: part.compatibility,
+      min_price: part.min_price ? Number(part.min_price) : null,
+      suggested_price: part.suggested_price ? Number(part.suggested_price) : null,
+      max_price: part.max_price ? Number(part.max_price) : null,
+      ad_title: part.ad_title,
+      ad_description: part.ad_description,
+      images: part.images as string[],
+      created_at: part.created_at,
+      updated_at: part.updated_at,
+      car_id: part.car_id,
+      car: part.car,
+    };
+
+  } catch (error) {
+    console.error('Erro ao buscar peça por critérios:', error);
     return {
       error: 'database_error',
       message: 'Erro interno do servidor. Tente novamente.'

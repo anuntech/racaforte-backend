@@ -1,8 +1,9 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import type { MultipartFile } from '@fastify/multipart';
 import * as partService from '../services/part.service.js';
-import { CreatePartSchema, UpdatePartSchema, ProcessPartSchema } from '../schemas/part.schema.js';
-import type { PartResponse, UpdatePartResponse, DeletePartResponse, ProcessPartResponse } from '../schemas/part.schema.js';
+import { CreatePartSchema, UpdatePartSchema, ProcessPartSchema, SearchPartCriteriaSchema } from '../schemas/part.schema.js';
+import type { PartResponse, UpdatePartResponse, DeletePartResponse, ProcessPartResponse, SearchPartCriteriaRequest } from '../schemas/part.schema.js';
+import type { PartCreationResult, ServiceError } from '../services/part.service.js';
 import * as geminiService from '../services/gemini.service.js';
 import { generateStandardAdTitle } from '../utils/title-generator.js';
 import * as storageService from '../services/storage.service.js';
@@ -22,6 +23,7 @@ interface FormFields {
   ad_title?: string;
   ad_description?: string;
   car_id?: string;
+  s3_image_urls?: string; // JSON string com array de URLs S3
 }
 
 export async function createPart(
@@ -117,14 +119,14 @@ export async function createPart(
             
             // Para clientes mobile, processa o arquivo imediatamente para evitar timeout
             if (isMobileClient) {
-              console.log(`📱 DEBUG - Cliente mobile detectado: processamento otimizado para ${part.filename}`);
+                              console.log('📱 DEBUG - Cliente mobile detectado: processamento otimizado para', part.filename);
               
               // Lê o buffer imediatamente com timeout reduzido
               try {
-                console.log(`💾 DEBUG - Iniciando leitura buffer otimizada para mobile...`);
+                console.log('💾 DEBUG - Iniciando leitura buffer otimizada para mobile...');
                 const bufferStartTime = Date.now();
                 
-                console.log(`⏱️ DEBUG - Criando promise de buffer...`);
+                console.log('⏱️ DEBUG - Criando promise de buffer...');
                 const bufferPromise = part.toBuffer();
                 const bufferTimeoutPromise = new Promise<never>((_, reject) => {
                   setTimeout(() => reject(new Error('Mobile buffer timeout')), MOBILE_BUFFER_TIMEOUT);
@@ -137,7 +139,7 @@ export async function createPart(
                 
                 console.log(`✅ DEBUG - Buffer mobile lido em ${bufferTime}ms, tamanho: ${buffer.length} bytes`);
                 
-                console.log(`🏗️ DEBUG - Criando processedFile para mobile...`);
+                console.log('🏗️ DEBUG - Criando processedFile para mobile...');
                 // Criar um objeto que simula o MultipartFile para compatibilidade
                 const processedFile = {
                   ...part,
@@ -145,22 +147,22 @@ export async function createPart(
                   async toBuffer() { return buffer; }
                 };
                 
-                console.log(`📋 DEBUG - Adicionando arquivo mobile ao array files...`);
+                console.log('📋 DEBUG - Adicionando arquivo mobile ao array files...');
                 files.push(processedFile as MultipartFile);
                 console.log(`✅ DEBUG - Arquivo mobile adicionado com sucesso. Total de arquivos: ${files.length}`);
                 
               } catch (error) {
-                console.error(`❌ DEBUG - Erro ao ler buffer mobile para ${part.filename}:`, error);
+                console.error('❌ DEBUG - Erro ao ler buffer mobile para', part.filename, ':', error);
                 throw error;
               }
             } else {
-              console.log(`🖥️ DEBUG - Cliente não-mobile detectado: adicionando arquivo diretamente`);
+              console.log('🖥️ DEBUG - Cliente não-mobile detectado: adicionando arquivo diretamente');
               // Para outros clientes, adiciona normalmente
               files.push(part);
               console.log(`✅ DEBUG - Arquivo não-mobile adicionado. Total de arquivos: ${files.length}`);
             }
             
-            console.log(`🔚 DEBUG - Finalizando processamento do arquivo ${part.filename}`);
+            console.log('🔚 DEBUG - Finalizando processamento do arquivo', part.filename);
           } else {
             console.log(`❓ DEBUG - Part não é field nem file: ${JSON.stringify(part)}`);
           }
@@ -185,7 +187,7 @@ export async function createPart(
       
       console.log(`⏱️ DEBUG - Iniciando processamento multipart com timeout de ${multipartTimeout}ms`);
       await Promise.race([multipartPromise, multipartTimeoutPromise]);
-      console.log(`✅ DEBUG - Promise.race do multipart concluído com sucesso!`);
+      console.log('✅ DEBUG - Promise.race do multipart concluído com sucesso!');
       
     } catch (error) {
       console.error('❌ Erro ao processar multipart data:', error);
@@ -213,7 +215,7 @@ export async function createPart(
           });
         }
         
-        if (error.message.includes('aborted') || (error as any).code === 'ECONNRESET') {
+        if (error.message.includes('aborted') || (error as { code?: string }).code === 'ECONNRESET') {
           console.log('🔌 DEBUG - Conexão abortada pelo cliente (ECONNRESET)');
           return reply.status(408).send({
             success: false,
@@ -253,6 +255,7 @@ export async function createPart(
       ad_title: fields.ad_title,
       ad_description: fields.ad_description,
       car_id: fields.car_id,
+      s3_image_urls: fields.s3_image_urls ? JSON.parse(fields.s3_image_urls) : undefined,
     };
 
     console.log('Dados processados:', partData);
@@ -275,37 +278,67 @@ export async function createPart(
     }
 
     console.log('📊 DEBUG - Total de arquivos encontrados:', files.length);
+    console.log('📊 DEBUG - URLs S3 fornecidas:', validationResult.data.s3_image_urls?.length || 0);
 
-    console.log('🔍 DEBUG - Verificando se tem arquivos...');
-    if (files.length === 0) {
-      console.log('❌ DEBUG - Nenhuma imagem encontrada');
+    // Verifica se tem imagens (arquivos OU URLs S3)
+    const hasFiles = files.length > 0;
+    const hasS3Urls = validationResult.data.s3_image_urls && validationResult.data.s3_image_urls.length > 0;
+
+    console.log('🔍 DEBUG - Verificando se tem imagens (arquivos ou URLs S3)...');
+    if (!hasFiles && !hasS3Urls) {
+      console.log('❌ DEBUG - Nenhuma imagem encontrada (nem arquivos nem URLs S3)');
       return reply.status(400).send({
         success: false,
         error: {
-          type: 'no_file',
-          message: 'Nenhuma imagem foi enviada.'
+          type: 'no_images',
+          message: 'Nenhuma imagem foi enviada. Envie arquivos ou forneça URLs S3.'
         }
       });
     }
 
-    if (files.length > 5) {
-      console.log('❌ DEBUG - Muitas imagens:', files.length);
+    // Verifica se está tentando usar ambos os métodos ao mesmo tempo
+    if (hasFiles && hasS3Urls) {
+      console.log('❌ DEBUG - Tentando usar arquivos E URLs S3 ao mesmo tempo');
       return reply.status(400).send({
         success: false,
         error: {
-          type: 'too_many_files',
+          type: 'mixed_image_methods',
+          message: 'Escolha apenas um método: envie arquivos OU forneça URLs S3, não ambos.'
+        }
+      });
+    }
+
+    // Verifica limite de imagens (independente do método)
+    const totalImages = hasFiles ? files.length : (validationResult.data.s3_image_urls?.length || 0);
+    if (totalImages > 5) {
+      console.log('❌ DEBUG - Muitas imagens:', totalImages);
+      return reply.status(400).send({
+        success: false,
+        error: {
+          type: 'too_many_images',
           message: 'Máximo de 5 imagens permitidas.'
         }
       });
     }
 
-    console.log('✅ DEBUG - Quantidade de arquivos válida, iniciando processamento de imagens...');
-    // Processa os arquivos com otimizações para iOS
-    const processedImages = [];
+    console.log('✅ DEBUG - Quantidade de imagens válida, iniciando processamento...');
     
-    console.log(`🔍 Iniciando validação de ${files.length} arquivos...`);
-    
-    for (let i = 0; i < files.length; i++) {
+    let finalImageUrls: string[] = [];
+    let uploadResult: PartCreationResult | ServiceError | undefined;
+
+    if (hasS3Urls) {
+      // Caso 1: URLs S3 diretas (skip upload)
+      console.log('📋 DEBUG - Usando URLs S3 diretas, pulando upload...');
+      finalImageUrls = validationResult.data.s3_image_urls || [];
+      console.log('✅ DEBUG - URLs S3 validadas:', finalImageUrls);
+    } else {
+      // Caso 2: Upload de arquivos (comportamento original)
+      console.log('📁 DEBUG - Processando upload de arquivos...');
+      const processedImages = [];
+      
+      console.log(`🔍 Iniciando validação de ${files.length} arquivos...`);
+      
+      for (let i = 0; i < files.length; i++) {
       const file = files[i];
       console.log(`📁 Processando arquivo ${i + 1}/${files.length}: ${file.filename}`);
       
@@ -332,21 +365,22 @@ export async function createPart(
         let buffer: Buffer;
         
         // Para clientes mobile, o buffer já foi carregado durante o multipart
-        if (isMobileClient && (file as any)._buffer) {
-          console.log(`📱 DEBUG - Usando buffer pré-carregado para cliente mobile`);
-          buffer = (file as any)._buffer;
+        const fileWithBuffer = file as MultipartFile & { _buffer?: Buffer };
+        if (isMobileClient && fileWithBuffer._buffer) {
+          console.log('📱 DEBUG - Usando buffer pré-carregado para cliente mobile');
+          buffer = fileWithBuffer._buffer;
         } else {
-          console.log(`🖥️ DEBUG - Cliente não-mobile ou sem buffer pré-carregado, chamando file.toBuffer()...`);
-          console.log(`🔍 DEBUG - isMobileClient: ${isMobileClient}, tem _buffer: ${!!(file as any)._buffer}`);
+          console.log('🖥️ DEBUG - Cliente não-mobile ou sem buffer pré-carregado, chamando file.toBuffer()...');
+          console.log(`🔍 DEBUG - isMobileClient: ${isMobileClient}, tem _buffer: ${!!fileWithBuffer._buffer}`);
           // Para outros clientes, carrega o buffer normalmente
-          console.log(`⏱️ DEBUG - Iniciando file.toBuffer()...`);
+          console.log('⏱️ DEBUG - Iniciando file.toBuffer()...');
           const bufferPromise = file.toBuffer();
           const bufferTimeoutPromise = new Promise<never>((_, reject) => 
             setTimeout(() => reject(new Error('Timeout na conversão do arquivo')), 30000)
           );
           
           buffer = await Promise.race([bufferPromise, bufferTimeoutPromise]);
-          console.log(`✅ DEBUG - file.toBuffer() concluído com sucesso!`);
+          console.log('✅ DEBUG - file.toBuffer() concluído com sucesso!');
         }
         
         const bufferTime = Date.now() - bufferStartTime;
@@ -390,23 +424,56 @@ export async function createPart(
           }
       });
     }
+      }
+      
+      console.log(`✅ Todos os ${processedImages.length} arquivos processados com sucesso`);
+      console.log('Total de imagens processadas:', processedImages.length);
+
+      // Chama o service para fazer upload e obter URLs
+      uploadResult = await partService.createPart(validationResult.data, processedImages);
+      
+      // Verifica se houve erro no service de upload
+      if ('error' in uploadResult) {
+        const statusCode = uploadResult.error === 'car_not_found' ? 404 : 500;
+        return reply.status(statusCode).send({
+          success: false,
+          error: {
+            type: uploadResult.error,
+            message: uploadResult.message
+          }
+        });
+      }
+
+      finalImageUrls = uploadResult.images;
     }
-    
-    console.log(`✅ Todos os ${processedImages.length} arquivos processados com sucesso`);
 
-    console.log('Total de imagens processadas:', processedImages.length);
-
-    // Chama o service para criar a peça
-    const result = await partService.createPart(validationResult.data, processedImages);
+    // Se chegou até aqui com URLs S3 diretas, precisa criar a peça no banco
+    let finalResult: PartCreationResult | ServiceError;
+    if (hasS3Urls) {
+      console.log('💾 DEBUG - Criando peça no banco com URLs S3 diretas...');
+      finalResult = await partService.createPartWithS3Urls(validationResult.data, finalImageUrls);
+    } else {
+      // Para uploads, o resultado já foi obtido acima
+      if (!uploadResult) {
+        return reply.status(500).send({
+          success: false,
+          error: {
+            type: 'internal_error',
+            message: 'Erro interno: resultado do upload não encontrado.'
+          }
+        });
+      }
+      finalResult = uploadResult;
+    }
 
     // Verifica se houve erro no service
-    if ('error' in result) {
-      const statusCode = result.error === 'car_not_found' ? 404 : 500;
+    if ('error' in finalResult) {
+      const statusCode = finalResult.error === 'car_not_found' ? 404 : 500;
       return reply.status(statusCode).send({
         success: false,
         error: {
-          type: result.error,
-          message: result.message
+          type: finalResult.error,
+          message: finalResult.message
         }
       });
     }
@@ -415,9 +482,9 @@ export async function createPart(
     return reply.status(201).send({
       success: true,
       data: {
-        id: result.id,
-        name: result.name,
-        images: result.images
+        id: finalResult.id,
+        name: finalResult.name,
+        images: finalResult.images
       }
     });
 
@@ -801,7 +868,7 @@ export async function processPart(
     console.log('🔄 DEBUG - ETAPA 1/3: Validando dados de entrada...');
 
     // Obtém dados do corpo da requisição (JSON)
-    const requestBody = request.body as any;
+    const requestBody = request.body as Record<string, unknown>;
     console.log('📝 Dados recebidos:', requestBody);
 
     // Prepara os dados para validação
@@ -979,6 +1046,94 @@ export async function searchPartsByName(
 
   } catch (error) {
     console.error('Erro no controller searchPartsByName:', error);
+    
+    return reply.status(500).send({
+      success: false,
+      error: {
+        type: 'server_error',
+        message: 'Erro interno do servidor. Tente novamente.'
+      }
+    });
+  }
+}
+
+export async function searchPartByCriteria(
+  request: FastifyRequest,
+  reply: FastifyReply
+): Promise<PartResponse> {
+  try {
+    console.log('🔍 Buscando peça por critérios específicos...');
+
+    // Obtém dados do corpo da requisição
+    const requestBody = request.body as SearchPartCriteriaRequest;
+    console.log('📝 Dados recebidos:', requestBody);
+
+    // Valida os dados usando o schema
+    const validationResult = SearchPartCriteriaSchema.safeParse(requestBody);
+    if (!validationResult.success) {
+      const firstError = validationResult.error.errors[0];
+      return reply.status(400).send({
+        success: false,
+        error: {
+          type: 'validation_error',
+          message: firstError.message
+        }
+      });
+    }
+
+    const { vehicle_internal_id, partName, partDescription } = validationResult.data;
+
+    console.log(`🔍 Buscando peça: ${partName} no veículo: ${vehicle_internal_id}`);
+
+    // Chama o service para buscar a peça
+    const result = await partService.searchPartByCriteria(
+      vehicle_internal_id,
+      partName,
+      partDescription
+    );
+
+    // Verifica se houve erro no service
+    if ('error' in result) {
+      const statusCode = result.error === 'car_not_found' ? 404 :
+                        result.error === 'part_not_found' ? 404 : 500;
+      return reply.status(statusCode).send({
+        success: false,
+        error: {
+          type: result.error,
+          message: result.message
+        }
+      });
+    }
+
+    console.log(`✅ Peça encontrada: ${result.name} (ID: ${result.id})`);
+
+    // Resposta de sucesso
+    return reply.status(200).send({
+      success: true,
+      data: {
+        id: result.id,
+        name: result.name,
+        description: result.description,
+        condition: result.condition,
+        stock_address: result.stock_address,
+        dimensions: result.dimensions,
+        weight: result.weight,
+        compatibility: result.compatibility,
+        min_price: result.min_price,
+        suggested_price: result.suggested_price,
+        max_price: result.max_price,
+        ad_title: result.ad_title,
+        ad_description: result.ad_description,
+        images: result.images,
+        created_at: result.created_at.toISOString(),
+        updated_at: result.updated_at.toISOString(),
+        car_id: result.car_id,
+        car: result.car
+      }
+    });
+
+  } catch (error) {
+    console.error('Erro no controller searchPartByCriteria:', error);
     
     return reply.status(500).send({
       success: false,

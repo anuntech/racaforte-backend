@@ -35,6 +35,10 @@ export const CreatePartSchema = z.object({
   ad_title: z.string().trim().optional(),
   ad_description: z.string().trim().optional(),
   car_id: z.string().min(1, 'ID do carro é obrigatório').trim(),
+  // Novo campo para URLs S3 diretas (alternativa ao upload de arquivos)
+  s3_image_urls: z.array(z.string().url('URL da imagem deve ser válida'))
+    .max(5, 'Máximo de 5 URLs de imagens permitidas')
+    .optional(),
 });
 
 // Schema para atualizar uma peça (todos os campos são opcionais)
@@ -197,6 +201,13 @@ export const ProcessPartSchema = z.object({
   vehicle_internal_id: z.string().min(1, 'ID interno do veículo é obrigatório').trim(),
 });
 
+// Schema para busca de peça por critérios específicos
+export const SearchPartCriteriaSchema = z.object({
+  vehicle_internal_id: z.string().min(1, 'ID interno do veículo é obrigatório').trim(),
+  partName: z.string().min(1, 'Nome da peça é obrigatório').trim(),
+  partDescription: z.string().trim().optional(),
+});
+
 // Schema para resposta do processamento de peças
 export const ProcessPartResponseSchema = z.object({
   success: z.boolean(),
@@ -239,6 +250,7 @@ export type DeletePartResponse = z.infer<typeof DeletePartResponseSchema>;
 export type AllPartsResponse = z.infer<typeof AllPartsResponseSchema>;
 export type ProcessPartRequest = z.infer<typeof ProcessPartSchema>;
 export type ProcessPartResponse = z.infer<typeof ProcessPartResponseSchema>;
+export type SearchPartCriteriaRequest = z.infer<typeof SearchPartCriteriaSchema>;
 export type PartCondition = z.infer<typeof PartConditionSchema>;
 export type Dimensions = z.infer<typeof DimensionsSchema>;
 export type Compatibility = z.infer<typeof CompatibilitySchema>; 
