@@ -52,7 +52,7 @@ export async function removeBackground(imageBuffer: Buffer): Promise<Buffer | St
       imageFormat = 'WEBP';
     }
     
-    console.log(`🖼️ DEBUG - Remove.bg input:`);
+    console.log('🖼️ DEBUG - Remove.bg input:');
     console.log(`   Formato detectado: ${imageFormat}`);
     console.log(`   Tamanho: ${imageBuffer.length} bytes (${inputSizeMB} MB)`);
     
@@ -84,18 +84,79 @@ export async function removeBackground(imageBuffer: Buffer): Promise<Buffer | St
     const response = await axios.post('https://api.remove.bg/v1.0/removebg', formData, axiosConfig);
 
     const requestTime = Date.now() - requestStartTime;
+    
+    // Verificar se a resposta indica erro (status 402 = sem créditos)
+    if (response.status === 402) {
+      console.log('💳 DEBUG - Status 402: Créditos insuficientes na remove.bg');
+      return {
+        error: 'insufficient_credits',
+        message: 'Créditos insuficientes na API remove.bg. Usando imagem original.'
+      };
+    }
+    
+    // DEBUG: Verificar resposta detalhadamente
+    console.log('🔍 DEBUG - Resposta remove.bg:');
+    console.log(`   Status: ${response.status}`);
+    console.log(`   Headers Content-Type: ${response.headers['content-type']}`);
+    console.log(`   Data type: ${typeof response.data}`);
+    console.log(`   Data length: ${response.data.length || response.data.byteLength || 'undefined'}`);
+    
+    // Verificar se a resposta é JSON (erro) em vez de uma imagem
+    const contentType = response.headers['content-type'] || '';
+    if (contentType.includes('application/json')) {
+      console.log('❌ DEBUG - Resposta é JSON (erro), não uma imagem');
+      let errorMessage = 'Erro na API remove.bg';
+      
+      try {
+        const errorData = typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
+        if (errorData.errors?.[0]?.title) {
+          errorMessage = errorData.errors[0].title;
+        }
+        console.log(`   Erro da API: ${errorMessage}`);
+      } catch (e) {
+        console.log('   Não foi possível decodificar erro JSON');
+      }
+      
+      return {
+        error: 'api_error',
+        message: `${errorMessage}. Usando imagem original.`
+      };
+    }
+    
     const resultBuffer = Buffer.from(response.data);
+    console.log(`   Buffer criado - length: ${resultBuffer.length} bytes`);
+    
+    // Verificar se o buffer não está vazio
+    if (resultBuffer.length === 0) {
+      console.log('❌ DEBUG - Buffer vazio recebido do remove.bg!');
+      return {
+        error: 'empty_result',
+        message: 'Remove.bg retornou resultado vazio. Usando imagem original.'
+      };
+    }
+    
+    // Verificar magic bytes do resultado
+    let resultFormat = 'unknown';
+    if (resultBuffer[0] === 0xFF && resultBuffer[1] === 0xD8 && resultBuffer[2] === 0xFF) {
+      resultFormat = 'JPEG';
+    } else if (resultBuffer[0] === 0x89 && resultBuffer[1] === 0x50 && resultBuffer[2] === 0x4E && resultBuffer[3] === 0x47) {
+      resultFormat = 'PNG';
+    } else if (resultBuffer.slice(0, 4).toString() === 'RIFF' && resultBuffer.slice(8, 12).toString() === 'WEBP') {
+      resultFormat = 'WEBP';
+    }
+    
     const outputSizeMB = (resultBuffer.length / 1024 / 1024).toFixed(2);
     const totalTime = Date.now() - startTime;
     const compressionPercent = ((1 - resultBuffer.length / imageBuffer.length) * 100).toFixed(1);
     
-    console.log(`✅ Background removido com sucesso`);
-    console.log(`⏱️ DEBUG - Remove.bg timing:`);
+    console.log('✅ Background removido com sucesso');
+    console.log('⏱️ DEBUG - Remove.bg timing:');
     console.log(`   Request: ${requestTime}ms`);
     console.log(`   Total: ${totalTime}ms`);
-    console.log(`📏 DEBUG - Remove.bg resultado:`);
+    console.log('📏 DEBUG - Remove.bg resultado:');
     console.log(`   Tamanho original: ${inputSizeMB} MB`);
     console.log(`   Tamanho resultado: ${outputSizeMB} MB`);
+    console.log(`   Formato resultado: ${resultFormat}`);
     console.log(`   Compressão: ${compressionPercent}%`);
     console.log(`   Status response: ${response.status}`);
     
@@ -107,7 +168,7 @@ export async function removeBackground(imageBuffer: Buffer): Promise<Buffer | St
     
     // DEBUG: Análise detalhada do erro
     if (axios.isAxiosError(error)) {
-      console.log(`🔍 DEBUG - Axios error details:`);
+      console.log('🔍 DEBUG - Axios error details:');
       console.log(`   Code: ${error.code}`);
       console.log(`   Status: ${error.response?.status}`);
       console.log(`   Status text: ${error.response?.statusText}`);
@@ -124,7 +185,7 @@ export async function removeBackground(imageBuffer: Buffer): Promise<Buffer | St
       
       // Timeout específico
       if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
-        console.log(`⏰ DEBUG - Timeout detectado após tentativa de conexão`);
+        console.log('⏰ DEBUG - Timeout detectado após tentativa de conexão');
         return {
           error: 'removebg_timeout',
           message: 'Timeout na remoção de background. Usando imagem original.'
@@ -132,7 +193,7 @@ export async function removeBackground(imageBuffer: Buffer): Promise<Buffer | St
       }
       
       if (error.response?.status === 402) {
-        console.log(`💳 DEBUG - Quota excedida (status 402)`);
+        console.log('💳 DEBUG - Quota excedida (status 402)');
         return {
           error: 'quota_exceeded',
           message: 'Cota da API removeBG excedida. Usando imagem original.'
@@ -141,7 +202,7 @@ export async function removeBackground(imageBuffer: Buffer): Promise<Buffer | St
       
       // Rate limit
       if (error.response?.status === 429) {
-        console.log(`🚫 DEBUG - Rate limit (status 429)`);
+        console.log('🚫 DEBUG - Rate limit (status 429)');
         return {
           error: 'rate_limit',
           message: 'Rate limit da API removeBG. Usando imagem original.'
@@ -161,7 +222,7 @@ export async function removeBackground(imageBuffer: Buffer): Promise<Buffer | St
 
     // Outros tipos de erro
     if (error instanceof Error) {
-      console.log(`🔍 DEBUG - Generic error:`);
+      console.log('🔍 DEBUG - Generic error:');
       console.log(`   Type: ${error.constructor.name}`);
       console.log(`   Message: ${error.message}`);
     }
@@ -281,7 +342,7 @@ export async function processAndUploadImage(
   imageBuffer: Buffer,
   filename: string,
   partId: string,
-  removeBackgroundEnabled: boolean = true
+  removeBackgroundEnabled = true
 ): Promise<UploadResult | StorageError> {
   try {
     let processedBuffer = imageBuffer;
@@ -317,7 +378,7 @@ export async function processAndUploadImage(
 export async function processAndUploadMultipleImages(
   images: Array<{ buffer: Buffer; filename: string }>,
   partId: string,
-  removeBackgroundEnabled: boolean = true
+  removeBackgroundEnabled = true
 ): Promise<Array<UploadResult | StorageError>> {
   console.log(`🚀 Processando ${images.length} imagens em paralelo...`);
 

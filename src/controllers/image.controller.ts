@@ -110,19 +110,39 @@ export async function removeBackground(request: FastifyRequest, reply: FastifyRe
         }
         
         // Converte para base64 e cria URL de dados
+        console.log('🔍 DEBUG - Convertendo buffer para base64:');
+        console.log(`   finalBuffer.length: ${finalBuffer.length} bytes`);
+        console.log(`   file.mimetype: ${file.mimetype}`);
+        
         const base64 = finalBuffer.toString('base64');
+        console.log(`   base64.length: ${base64.length} caracteres`);
+        console.log(`   base64 preview (primeiros 50 chars): ${base64.substring(0, 50)}`);
+        
         const dataUrl = `data:${file.mimetype};base64,${base64}`;
+        console.log(`   dataUrl.length: ${dataUrl.length} caracteres`);
+        console.log(`   dataUrl preview (primeiros 100 chars): ${dataUrl.substring(0, 100)}`);
+        
         processedImages.push(dataUrl);
+        console.log(`✅ Imagem ${file.filename} adicionada ao array processedImages (total: ${processedImages.length})`);
         
       } catch (error) {
         console.error(`❌ Erro ao processar ${file.filename}:`, error);
         failedRemovals++;
         
         // Se houver erro, usa a imagem original
+        console.log('🔧 DEBUG - Usando imagem original devido ao erro:');
         const buffer = await readFile(file.filepath);
+        console.log(`   buffer original.length: ${buffer.length} bytes`);
+        
         const base64 = buffer.toString('base64');
+        console.log(`   base64 original.length: ${base64.length} caracteres`);
+        console.log(`   base64 original preview: ${base64.substring(0, 50)}`);
+        
         const dataUrl = `data:${file.mimetype};base64,${base64}`;
+        console.log(`   dataUrl original.length: ${dataUrl.length} caracteres`);
+        
         processedImages.push(dataUrl);
+        console.log(`✅ Imagem original ${file.filename} adicionada (total: ${processedImages.length})`);
       }
     }
 
@@ -130,8 +150,14 @@ export async function removeBackground(request: FastifyRequest, reply: FastifyRe
     console.log(`⏱️ Processamento de remoção de fundo completo em: ${processingTime}ms`);
     console.log(`📊 Resultados: ${successfulRemovals} sucessos, ${failedRemovals} falhas`);
 
-    // Resposta de sucesso
-    return reply.status(200).send({
+    // DEBUG: Verificar array final de imagens processadas
+    console.log('🔍 DEBUG - Resposta final:');
+    console.log(`   processedImages.length: ${processedImages.length}`);
+    processedImages.forEach((img, index) => {
+      console.log(`   Imagem ${index + 1}: ${img.length} caracteres, começa com: ${img.substring(0, 50)}`);
+    });
+
+    const responseData = {
       success: true,
       data: {
         processed_images: processedImages,
@@ -142,7 +168,12 @@ export async function removeBackground(request: FastifyRequest, reply: FastifyRe
           processing_time_ms: processingTime
         }
       }
-    });
+    };
+
+    console.log(`📤 DEBUG - Enviando resposta com ${responseData.data.processed_images.length} imagens`);
+
+    // Resposta de sucesso
+    return reply.status(200).send(responseData);
 
   } catch (error) {
     console.error('❌ Erro no controller removeBackground:', error);
