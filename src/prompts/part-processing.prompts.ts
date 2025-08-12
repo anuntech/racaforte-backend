@@ -6,7 +6,7 @@ export function buildPartProcessingPrompt(
   vehicleYear: number
 ): string {
   const description = partDescription ? ` ${partDescription}` : '';
-  return `Realize uma busca no mercado livre para encontrar o melhor preço para a peça ${partName}${description} do veículo ${vehicleBrand} ${vehicleModel} ${vehicleYear}.
+  return `Realize uma busca no mercado livre para encontrar o melhor preço para a peça (usada) ${partName}${description} do veículo ${vehicleBrand} ${vehicleModel} ${vehicleYear}.
 
 Retorne JSON:
 {
