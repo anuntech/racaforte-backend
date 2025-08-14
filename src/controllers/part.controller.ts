@@ -929,7 +929,7 @@ export async function processPart(
     console.log('🤖 Enviando para processamento com IA (apenas dados)...');
     const aiStartTime = Date.now();
     
-    const aiResult = await geminiService.processPartDataWithGemini(
+    const aiResult = await geminiService.processPartWithSeparatePrompts(
       validationResult.data.name,
       validationResult.data.description,
       vehicle.brand,

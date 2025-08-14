@@ -1,5 +1,12 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { buildPartProcessingPrompt } from '../prompts/part-processing.prompts.js';
+import { 
+  buildPartProcessingPrompt,
+  buildPricesPrompt,
+  buildAdDescriptionPrompt,
+  buildDimensionsPrompt,
+  buildWeightPrompt,
+  buildCompatibilityPrompt
+} from '../prompts/part-processing.prompts.js';
 
 // Tipos para compatibilidade com o sistema existente
 interface ProcessingError {
@@ -28,6 +35,40 @@ interface PartProcessingWithPrices {
   };
 }
 
+// Tipos específicos para cada resposta individual
+interface PricesResponse {
+  prices: {
+    min_price: number;
+    suggested_price: number;
+    max_price: number;
+  };
+}
+
+interface AdDescriptionResponse {
+  ad_description: string;
+}
+
+interface DimensionsResponse {
+  dimensions: {
+    width: string;
+    height: string;
+    depth: string;
+    unit: string;
+  };
+}
+
+interface WeightResponse {
+  weight: number;
+}
+
+interface CompatibilityResponse {
+  compatibility: Array<{
+    brand: string;
+    model: string;
+    year: string;
+  }>;
+}
+
 // Removido: sempre incluímos preços agora
 
 // Instância compartilhada do Gemini
@@ -54,6 +95,68 @@ function cleanGeminiResponse(content: string): string {
   cleanContent = cleanContent.trim();
   
   return cleanContent;
+}
+
+// Extrai a primeira substring que representa um objeto JSON balanceado
+function extractFirstJsonObject(text: string): string | null {
+  const startIndex = text.indexOf('{');
+  if (startIndex === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = startIndex; i < text.length; i++) {
+    const char = text[i];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === '{') {
+      depth += 1;
+    } else if (char === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return text.substring(startIndex, i + 1);
+      }
+    }
+  }
+  return null;
+}
+
+// Faz o parse robusto do JSON vindo do modelo (tolerante a texto extra)
+function safeParseLlmJson<T>(rawContent: string): T {
+  const cleaned = cleanGeminiResponse(rawContent);
+  // Tenta diretamente
+  try {
+    return JSON.parse(cleaned) as T;
+  } catch (_) {
+    // Tenta extrair primeiro objeto JSON balanceado
+    const candidate = extractFirstJsonObject(cleaned);
+    if (!candidate) throw new Error('invalid_json: no_json_object_found');
+    try {
+      return JSON.parse(candidate) as T;
+    } catch (err) {
+      // Pequena tentativa de normalizar vírgulas finais comuns
+      const withoutTrailingCommas = candidate
+        .replace(/,\s*}/g, '}')
+        .replace(/,\s*\]/g, ']');
+      return JSON.parse(withoutTrailingCommas) as T;
+    }
+  }
 }
 
 /**
@@ -385,6 +488,211 @@ export async function processPartDataWithGemini(
     return {
       error: "api_error", 
       message: "Erro na API Gemini. Verifique sua conexão e tente novamente."
+    };
+  }
+}
+
+// Função auxiliar para fazer chamadas individuais ao Gemini
+async function callGeminiWithPrompt<T>(
+  prompt: string,
+  timeoutMs = 10000,
+  label = 'generic'
+): Promise<T> {
+  const genAI = initializeGemini();
+  
+  const model = genAI.getGenerativeModel({ 
+    model: "gemini-2.5-flash",
+    generationConfig: {
+      temperature: 0.3,
+      maxOutputTokens: 1024,
+    }
+  });
+
+  console.log(`\n🔎 [Gemini:${label}] Prompt (${prompt.length} chars):`);
+  console.log(prompt.length > 600 ? `${prompt.slice(0, 600)}...` : prompt);
+  console.log(`📤 [Gemini:${label}] Enviando requisição (timeout: ${timeoutMs}ms)`);
+
+  const geminiPromise = model.generateContent([prompt]);
+  
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => {
+      reject(new Error(`Gemini timeout após ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  const result = await Promise.race([geminiPromise, timeoutPromise]);
+  const content = result.response.text();
+  
+  console.log(`📥 [Gemini:${label}] Resposta recebida (${content?.length || 0} chars):`);
+  if (content) {
+    console.log(content.length > 800 ? `${content.slice(0, 800)}...` : content);
+  } else {
+    console.log(`❌ [Gemini:${label}] Resposta vazia`);
+    // Lança erro específico para permitir fallback sem logar erro de parse
+    throw new Error('empty_response');
+  }
+
+  try {
+    const parsed = safeParseLlmJson<T>(content);
+    const preview = JSON.stringify(parsed, null, 2);
+    console.log(`✅ [Gemini:${label}] JSON parse OK (${preview.length} chars)`);
+    console.log(preview.length > 800 ? `${preview.slice(0, 800)}...` : preview);
+    return parsed;
+  } catch (err) {
+    console.error(`❌ [Gemini:${label}] Falha ao parsear JSON do Gemini:`, err);
+    console.error(`❌ [Gemini:${label}] Conteúdo bruto retornado:`, content);
+    throw err;
+  }
+}
+
+// Função para buscar preços
+async function getPrices(
+  partName: string,
+  partDescription: string | undefined,
+  vehicleBrand: string,
+  vehicleModel: string,
+  vehicleYear: number
+): Promise<PricesResponse> {
+  const prompt = buildPricesPrompt(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear);
+  return await callGeminiWithPrompt<PricesResponse>(prompt, 12000, 'prices');
+}
+
+// Função para gerar descrição do anúncio
+async function getAdDescription(
+  partName: string,
+  partDescription: string | undefined,
+  vehicleBrand: string,
+  vehicleModel: string,
+  vehicleYear: number
+): Promise<AdDescriptionResponse> {
+  const prompt = buildAdDescriptionPrompt(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear);
+  return await callGeminiWithPrompt<AdDescriptionResponse>(prompt, 12000, 'ad_description');
+}
+
+// Função para estimar dimensões
+async function getDimensions(
+  partName: string,
+  partDescription: string | undefined,
+  vehicleBrand: string,
+  vehicleModel: string,
+  vehicleYear: number
+): Promise<DimensionsResponse> {
+  const prompt = buildDimensionsPrompt(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear);
+  return await callGeminiWithPrompt<DimensionsResponse>(prompt, 12000, 'dimensions');
+}
+
+// Função para estimar peso
+async function getWeight(
+  partName: string,
+  partDescription: string | undefined,
+  vehicleBrand: string,
+  vehicleModel: string,
+  vehicleYear: number
+): Promise<WeightResponse> {
+  const prompt = buildWeightPrompt(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear);
+  return await callGeminiWithPrompt<WeightResponse>(prompt, 12000, 'weight');
+}
+
+// Função para determinar compatibilidade
+async function getCompatibility(
+  partName: string,
+  partDescription: string | undefined,
+  vehicleBrand: string,
+  vehicleModel: string,
+  vehicleYear: number
+): Promise<CompatibilityResponse> {
+  const prompt = buildCompatibilityPrompt(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear);
+  try {
+    return await callGeminiWithPrompt<CompatibilityResponse>(prompt, 12000, 'compatibility');
+  } catch (err) {
+    if (err instanceof Error && err.message === 'empty_response') {
+      console.warn('⚠️ [Gemini:compatibility] Resposta vazia. Usando fallback com veículo original.');
+      return {
+        compatibility: [
+          {
+            brand: vehicleBrand,
+            model: vehicleModel,
+            year: String(vehicleYear),
+          },
+        ],
+      };
+    }
+    console.warn('⚠️ [Gemini:compatibility] Tentando novamente com timeout maior...');
+    try {
+      return await callGeminiWithPrompt<CompatibilityResponse>(prompt, 20000, 'compatibility-retry');
+    } catch (err2) {
+      console.warn('⚠️ [Gemini:compatibility] Retornando fallback com veículo original.');
+      return {
+        compatibility: [
+          {
+            brand: vehicleBrand,
+            model: vehicleModel,
+            year: String(vehicleYear),
+          },
+        ],
+      };
+    }
+  }
+}
+
+/**
+ * Nova função que processa peça usando prompts separados para melhor qualidade
+ */
+export async function processPartWithSeparatePrompts(
+  partName: string,
+  partDescription: string | undefined,
+  vehicleBrand: string,
+  vehicleModel: string,
+  vehicleYear: number
+): Promise<PartProcessingWithPrices | ProcessingError> {
+  
+  console.log(`🤖 Iniciando processamento com prompts separados: ${partName}`);
+  console.log(`🚗 Veículo: ${vehicleBrand} ${vehicleModel} ${vehicleYear}`);
+  
+  try {
+    // Executa todas as chamadas em paralelo para melhor performance
+    console.log('🔄 Executando consultas em paralelo...');
+    const [
+      pricesResult,
+      adDescriptionResult,
+      dimensionsResult,
+      weightResult,
+      compatibilityResult
+    ] = await Promise.all([
+      getPrices(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear),
+      getAdDescription(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear),
+      getDimensions(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear),
+      getWeight(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear),
+      getCompatibility(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear)
+    ]);
+
+    console.log('✅ Todas as consultas concluídas');
+
+    // Combina todos os resultados
+    const combinedResult: PartProcessingWithPrices = {
+      prices: pricesResult.prices,
+      ad_description: adDescriptionResult.ad_description,
+      dimensions: dimensionsResult.dimensions,
+      weight: weightResult.weight,
+      compatibility: compatibilityResult.compatibility
+    };
+
+    console.log('✅ Processamento com prompts separados concluído');
+    return combinedResult;
+
+  } catch (error) {
+    console.error('❌ Erro no processamento com prompts separados:', error);
+    
+    if (error instanceof Error && error.message.includes('timeout')) {
+      return {
+        error: "gemini_timeout",
+        message: "Processamento muito lento - tente novamente."
+      };
+    }
+
+    return {
+      error: "api_error", 
+      message: "Erro no processamento com IA. Tente novamente."
     };
   }
 } 
