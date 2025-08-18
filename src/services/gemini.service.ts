@@ -504,8 +504,11 @@ async function callGeminiWithPrompt<T>(
     model: "gemini-2.5-flash",
     generationConfig: {
       temperature: 0.3,
-      maxOutputTokens: 1024,
-    }
+      maxOutputTokens: 2048, // Aumentado para evitar MAX_TOKENS
+      // Desabilita o raciocínio interno que está consumindo tokens
+      responseLogprobs: false,
+    },
+    systemInstruction: "Responda de forma direta e concisa. Não inclua explicações ou raciocínio extra."
   });
 
   console.log(`\n🔎 [Gemini:${label}] Prompt (${prompt.length} chars):`);
@@ -528,6 +531,10 @@ async function callGeminiWithPrompt<T>(
     console.log(content.length > 800 ? `${content.slice(0, 800)}...` : content);
   } else {
     console.log(`❌ [Gemini:${label}] Resposta vazia`);
+    // Log resumido para debug
+    if (result.response.candidates?.[0]?.finishReason === 'MAX_TOKENS') {
+      console.log(`🔍 [Gemini:${label}] Motivo: MAX_TOKENS atingido`);
+    }
     // Lança erro específico para permitir fallback sem logar erro de parse
     throw new Error('empty_response');
   }
@@ -545,7 +552,7 @@ async function callGeminiWithPrompt<T>(
   }
 }
 
-// Função para buscar preços
+// Função para buscar preços - PRIORIDADE MÁXIMA
 async function getPrices(
   partName: string,
   partDescription: string | undefined,
@@ -554,7 +561,122 @@ async function getPrices(
   vehicleYear: number
 ): Promise<PricesResponse> {
   const prompt = buildPricesPrompt(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear);
-  return await callGeminiWithPrompt<PricesResponse>(prompt, 12000, 'prices');
+  
+  // Configuração especial para prices - SEM limitações de tokens
+  const genAI = initializeGemini();
+  const model = genAI.getGenerativeModel({ 
+    model: "gemini-2.5-flash",
+    generationConfig: {
+      temperature: 0.2, // Mais determinístico para preços
+      maxOutputTokens: 16384, // MÁXIMO ABSOLUTO (16K)
+      // Sem responseLogprobs para permitir pensamento completo
+    },
+    systemInstruction: "Pesquise preços reais no mercado brasileiro. Retorne valores numéricos válidos, nunca null. Use dados do Mercado Livre, OLX e lojas de autopeças. Seja DIRETO e CONCISO na resposta - foque apenas no JSON."
+  });
+
+  try {
+    console.log(`💰 [Gemini:prices] PRIORIDADE MÁXIMA - Prompt (${prompt.length} chars):`);
+    console.log(prompt);
+    console.log('📤 [Gemini:prices] Enviando com configuração especial (maxTokens: 16384, sem limites de pensamento)');
+
+    const geminiPromise = model.generateContent([prompt]);
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error('Gemini timeout após 20000ms'));
+      }, 20000); // Timeout maior para permitir pensamento
+    });
+
+    const result = await Promise.race([geminiPromise, timeoutPromise]);
+    const content = result.response.text();
+    
+    console.log(`📥 [Gemini:prices] Resposta recebida (${content?.length || 0} chars):`);
+    console.log(content);
+    
+    // Log detalhado do motivo da falha se necessário
+    if (!content) {
+      console.log('🔍 [Gemini:prices] DEBUG - Analisando motivo da resposta vazia:');
+      console.log('   result.response.candidates:', result.response.candidates);
+      console.log('   finishReason:', result.response.candidates?.[0]?.finishReason);
+      console.log('   usageMetadata:', result.response.usageMetadata);
+      throw new Error('empty_response');
+    }
+
+    const parsed = safeParseLlmJson<PricesResponse>(content);
+    
+    // Validação especial para prices - nunca aceitar null
+    if (!parsed.prices || 
+        parsed.prices.min_price === null || 
+        parsed.prices.suggested_price === null || 
+        parsed.prices.max_price === null ||
+        parsed.prices.min_price === undefined || 
+        parsed.prices.suggested_price === undefined || 
+        parsed.prices.max_price === undefined) {
+      console.warn('⚠️ [Gemini:prices] Resposta contém valores null/undefined, tentando novamente...');
+      throw new Error('invalid_prices');
+    }
+
+    console.log('✅ [Gemini:prices] Preços válidos obtidos');
+    return parsed;
+
+  } catch (err) {
+    console.warn('⚠️ [Gemini:prices] Primeira tentativa falhou, analisando erro...');
+    console.log('🔍 [Gemini:prices] Erro capturado:', err);
+    console.warn('⚠️ [Gemini:prices] Usando prompt simplificado...');
+    
+    // Segunda tentativa com prompt mais direto
+    const simplePrompt = `Estime preços realistas para a peça automotiva "${partName}" no mercado brasileiro atual.
+
+Retorne JSON com preços em reais (números, não null):
+{
+  "prices": {
+    "min_price": preco_minimo_numero,
+    "suggested_price": preco_sugerido_numero,
+    "max_price": preco_maximo_numero
+  }
+}
+
+IMPORTANTE: Use valores numéricos reais, nunca null.`;
+
+    try {
+      const result2 = await model.generateContent([simplePrompt]);
+      const content2 = result2.response.text();
+      
+      if (content2) {
+        const parsed2 = safeParseLlmJson<PricesResponse>(content2);
+        if (parsed2.prices && 
+            typeof parsed2.prices.min_price === 'number' && 
+            typeof parsed2.prices.suggested_price === 'number' && 
+            typeof parsed2.prices.max_price === 'number') {
+          console.log('✅ [Gemini:prices] Sucesso na segunda tentativa');
+          return parsed2;
+        }
+      }
+    } catch (err2) {
+      console.warn('⚠️ [Gemini:prices] Segunda tentativa também falhou');
+    }
+
+    // Fallback final baseado no tipo de peça
+    console.warn('⚠️ [Gemini:prices] Usando fallback inteligente baseado na peça');
+    const baseName = partName.toLowerCase();
+    let basePrice = 150; // Padrão
+
+    if (baseName.includes('alternador')) basePrice = 250;
+    else if (baseName.includes('motor')) basePrice = 800;
+    else if (baseName.includes('transmissao')) basePrice = 1200;
+    else if (baseName.includes('freio')) basePrice = 120;
+    else if (baseName.includes('lanterna')) basePrice = 80;
+    else if (baseName.includes('farol')) basePrice = 150;
+    else if (baseName.includes('para-choque')) basePrice = 200;
+    else if (baseName.includes('porta')) basePrice = 300;
+
+    return {
+      prices: {
+        min_price: Math.round(basePrice * 0.6),
+        suggested_price: basePrice,
+        max_price: Math.round(basePrice * 2.0),
+      },
+    };
+  }
 }
 
 // Função para gerar descrição do anúncio
@@ -566,7 +688,7 @@ async function getAdDescription(
   vehicleYear: number
 ): Promise<AdDescriptionResponse> {
   const prompt = buildAdDescriptionPrompt(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear);
-  return await callGeminiWithPrompt<AdDescriptionResponse>(prompt, 12000, 'ad_description');
+  return await callGeminiWithPrompt<AdDescriptionResponse>(prompt, 20000, 'ad_description');
 }
 
 // Função para estimar dimensões
@@ -578,7 +700,24 @@ async function getDimensions(
   vehicleYear: number
 ): Promise<DimensionsResponse> {
   const prompt = buildDimensionsPrompt(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear);
-  return await callGeminiWithPrompt<DimensionsResponse>(prompt, 12000, 'dimensions');
+  try {
+    return await callGeminiWithPrompt<DimensionsResponse>(prompt, 20000, 'dimensions');
+  } catch (err) {
+    console.warn('⚠️ [Gemini:dimensions] Tentando novamente com timeout maior...');
+    try {
+      return await callGeminiWithPrompt<DimensionsResponse>(prompt, 30000, 'dimensions-retry');
+    } catch (err2) {
+      console.warn('⚠️ [Gemini:dimensions] Retornando fallback com dimensões padrão.');
+      return {
+        dimensions: {
+          width: "20",
+          height: "15",
+          depth: "10",
+          unit: "cm",
+        },
+      };
+    }
+  }
 }
 
 // Função para estimar peso
@@ -590,7 +729,7 @@ async function getWeight(
   vehicleYear: number
 ): Promise<WeightResponse> {
   const prompt = buildWeightPrompt(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear);
-  return await callGeminiWithPrompt<WeightResponse>(prompt, 12000, 'weight');
+  return await callGeminiWithPrompt<WeightResponse>(prompt, 20000, 'weight');
 }
 
 // Função para determinar compatibilidade
@@ -603,7 +742,7 @@ async function getCompatibility(
 ): Promise<CompatibilityResponse> {
   const prompt = buildCompatibilityPrompt(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear);
   try {
-    return await callGeminiWithPrompt<CompatibilityResponse>(prompt, 12000, 'compatibility');
+    return await callGeminiWithPrompt<CompatibilityResponse>(prompt, 20000, 'compatibility');
   } catch (err) {
     if (err instanceof Error && err.message === 'empty_response') {
       console.warn('⚠️ [Gemini:compatibility] Resposta vazia. Usando fallback com veículo original.');
@@ -619,7 +758,7 @@ async function getCompatibility(
     }
     console.warn('⚠️ [Gemini:compatibility] Tentando novamente com timeout maior...');
     try {
-      return await callGeminiWithPrompt<CompatibilityResponse>(prompt, 20000, 'compatibility-retry');
+      return await callGeminiWithPrompt<CompatibilityResponse>(prompt, 30000, 'compatibility-retry');
     } catch (err2) {
       console.warn('⚠️ [Gemini:compatibility] Retornando fallback com veículo original.');
       return {

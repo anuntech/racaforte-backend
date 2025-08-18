@@ -21,7 +21,7 @@ interface PartDetailsResult {
   name: string;
   description: string;
   condition: string;
-  stock_address: string;
+  stock_address: string | null;
   dimensions: unknown;
   weight: number | null;
   compatibility: unknown;
@@ -30,7 +30,7 @@ interface PartDetailsResult {
   max_price: number | null;
   ad_title: string | null;
   ad_description: string | null;
-  images: string[];
+  images: string[] | null;
   created_at: Date;
   updated_at: Date;
   car_id: string;
@@ -49,7 +49,7 @@ interface PartDetailsResult {
  */
 export async function createPart(
   partData: CreatePartRequest,
-  images: Array<{ buffer: Buffer; filename: string }>
+  images?: Array<{ buffer: Buffer; filename: string }>
 ): Promise<PartCreationResult | ServiceError> {
   try {
     // Verifica se o carro existe (tenta por ID interno primeiro)
@@ -75,7 +75,7 @@ export async function createPart(
         name: partData.name,
         description: partData.description || '',
         condition: partData.condition,
-        stock_address: partData.stock_address,
+        stock_address: partData.stock_address || undefined,
         dimensions: partData.dimensions || undefined,
         weight: partData.weight || undefined,
         compatibility: partData.compatibility || undefined,
@@ -85,7 +85,7 @@ export async function createPart(
         ad_title: partData.ad_title || undefined,
         ad_description: partData.ad_description || undefined,
         car_id: car.id, // Usa o ID interno do carro
-        images: [], // Inicialmente vazio, será atualizado após upload
+        images: [], // Inicialmente vazio, será atualizado após upload se houver imagens
       },
       select: {
         id: true,
@@ -93,21 +93,27 @@ export async function createPart(
       }
     });
 
-    // Processa e faz upload das imagens (sem remoção de background, já feito no /part/process)
-    console.log(`🖼️ Fazendo upload de ${images.length} imagens para a peça ${part.id}...`);
-    const uploadResults = await processAndUploadMultipleImages(images, part.id, false);
+    let imageUrls: string[] = [];
+    
+    // Processa e faz upload das imagens apenas se houver imagens
+    if (images && images.length > 0) {
+      console.log(`🖼️ Fazendo upload de ${images.length} imagens para a peça ${part.id}...`);
+      const uploadResults = await processAndUploadMultipleImages(images, part.id, false);
 
-    // Filtra apenas os uploads bem-sucedidos
-    const successfulUploads = uploadResults.filter((result): result is UploadResult => !('error' in result));
-    const imageUrls = successfulUploads.map(result => result.url);
+      // Filtra apenas os uploads bem-sucedidos
+      const successfulUploads = uploadResults.filter((result): result is UploadResult => !('error' in result));
+      imageUrls = successfulUploads.map(result => result.url);
 
-    if (imageUrls.length === 0) {
-      // Se nenhuma imagem foi enviada com sucesso, deleta a peça e retorna erro
-      await prisma.part.delete({ where: { id: part.id } });
-      return {
-        error: 'image_upload_failed',
-        message: 'Não foi possível fazer upload das imagens. Tente novamente.'
-      };
+      if (imageUrls.length === 0 && images.length > 0) {
+        // Se foram enviadas imagens mas nenhuma teve sucesso no upload, deleta a peça e retorna erro
+        await prisma.part.delete({ where: { id: part.id } });
+        return {
+          error: 'image_upload_failed',
+          message: 'Não foi possível fazer upload das imagens. Tente novamente.'
+        };
+      }
+    } else {
+      console.log('📝 Criando peça sem imagens...');
     }
 
     // Atualiza a peça com as URLs das imagens

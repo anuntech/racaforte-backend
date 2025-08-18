@@ -286,14 +286,8 @@ export async function createPart(
 
     console.log('🔍 DEBUG - Verificando se tem imagens (arquivos ou URLs S3)...');
     if (!hasFiles && !hasS3Urls) {
-      console.log('❌ DEBUG - Nenhuma imagem encontrada (nem arquivos nem URLs S3)');
-      return reply.status(400).send({
-        success: false,
-        error: {
-          type: 'no_images',
-          message: 'Nenhuma imagem foi enviada. Envie arquivos ou forneça URLs S3.'
-        }
-      });
+      console.log('ℹ️ DEBUG - Nenhuma imagem encontrada - criando peça sem imagens');
+      // Não retorna erro mais - imagens são opcionais agora
     }
 
     // Verifica se está tentando usar ambos os métodos ao mesmo tempo
@@ -308,7 +302,7 @@ export async function createPart(
       });
     }
 
-    // Verifica limite de imagens (independente do método)
+    // Verifica limite de imagens apenas se houver imagens
     const totalImages = hasFiles ? files.length : (validationResult.data.s3_image_urls?.length || 0);
     if (totalImages > 5) {
       console.log('❌ DEBUG - Muitas imagens:', totalImages);
@@ -331,7 +325,7 @@ export async function createPart(
       console.log('📋 DEBUG - Usando URLs S3 diretas, pulando upload...');
       finalImageUrls = validationResult.data.s3_image_urls || [];
       console.log('✅ DEBUG - URLs S3 validadas:', finalImageUrls);
-    } else {
+    } else if (hasFiles) {
       // Caso 2: Upload de arquivos (comportamento original)
       console.log('📁 DEBUG - Processando upload de arquivos...');
       const processedImages = [];
@@ -430,7 +424,10 @@ export async function createPart(
       console.log('Total de imagens processadas:', processedImages.length);
 
       // Chama o service para fazer upload e obter URLs
-      uploadResult = await partService.createPart(validationResult.data, processedImages);
+      uploadResult = await partService.createPart(
+        validationResult.data, 
+        processedImages.length > 0 ? processedImages : undefined
+      );
       
       // Verifica se houve erro no service de upload
       if ('error' in uploadResult) {
@@ -445,14 +442,18 @@ export async function createPart(
       }
 
       finalImageUrls = uploadResult.images;
+    } else {
+      // Caso 3: Sem imagens (novo - imagens opcionais)
+      console.log('📝 DEBUG - Criando peça sem imagens...');
+      finalImageUrls = [];
     }
 
-    // Se chegou até aqui com URLs S3 diretas, precisa criar a peça no banco
+    // Cria a peça no banco dependendo do método usado
     let finalResult: PartCreationResult | ServiceError;
     if (hasS3Urls) {
       console.log('💾 DEBUG - Criando peça no banco com URLs S3 diretas...');
       finalResult = await partService.createPartWithS3Urls(validationResult.data, finalImageUrls);
-    } else {
+    } else if (hasFiles) {
       // Para uploads, o resultado já foi obtido acima
       if (!uploadResult) {
         return reply.status(500).send({
@@ -464,6 +465,10 @@ export async function createPart(
         });
       }
       finalResult = uploadResult;
+    } else {
+      // Sem imagens - criar peça diretamente
+      console.log('💾 DEBUG - Criando peça no banco sem imagens...');
+      finalResult = await partService.createPart(validationResult.data, undefined);
     }
 
     // Verifica se houve erro no service
@@ -853,7 +858,12 @@ export async function processPart(
   reply: FastifyReply
 ): Promise<ProcessPartResponse> {
   try {
-    console.log('🚀 Iniciando processamento de dados da peça...');
+    const requestId = Math.random().toString(36).substring(2, 8);
+    console.log(`🚀 [${requestId}] Iniciando processamento de dados da peça...`);
+    console.log(`🔍 [${requestId}] DEBUG - Headers da requisição:`, JSON.stringify(request.headers, null, 2));
+    console.log(`🔍 [${requestId}] DEBUG - IP do cliente:`, request.ip);
+    console.log(`🔍 [${requestId}] DEBUG - Método:`, request.method);
+    console.log(`🔍 [${requestId}] DEBUG - URL:`, request.url);
     
     const startTime = Date.now();
     
@@ -861,15 +871,15 @@ export async function processPart(
     const userAgent = request.headers['user-agent'] || 'unknown';
     const contentType = request.headers['content-type'] || 'unknown';
     
-    console.log('📱 DEBUG - Informações da requisição:');
+    console.log(`📱 [${requestId}] DEBUG - Informações da requisição:`);
     console.log('   User-Agent:', userAgent);
     console.log('   Content-Type:', contentType);
     
-    console.log('🔄 DEBUG - ETAPA 1/3: Validando dados de entrada...');
+    console.log(`🔄 [${requestId}] DEBUG - ETAPA 1/3: Validando dados de entrada...`);
 
     // Obtém dados do corpo da requisição (JSON)
     const requestBody = request.body as Record<string, unknown>;
-    console.log('📝 Dados recebidos:', requestBody);
+    console.log(`📝 [${requestId}] Dados recebidos:`, requestBody);
 
     // Prepara os dados para validação
     const processData = {

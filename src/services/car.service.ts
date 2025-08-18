@@ -27,7 +27,7 @@ interface CarPartResult {
   name: string;
   description: string;
   condition: 'BOA' | 'MEDIA' | 'RUIM';
-  stock_address: string;
+  stock_address: string | null;
   dimensions: unknown;
   weight: number | null;
   compatibility: unknown;
@@ -36,7 +36,7 @@ interface CarPartResult {
   max_price: number | null;
   ad_title: string | null;
   ad_description: string | null;
-  images: string[];
+  images: string[] | null;
   created_at: Date;
   updated_at: Date;
   car_id: string;
