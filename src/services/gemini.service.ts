@@ -42,6 +42,10 @@ interface PricesResponse {
     suggested_price: number;
     max_price: number;
   };
+  ads?: Array<{
+    link: string;
+    price: number;
+  }>;
 }
 
 interface AdDescriptionResponse {
@@ -629,6 +633,20 @@ async function getPrices(
     }
 
     console.log('✅ [Gemini:prices] Preços válidos obtidos');
+    
+    // Log dos preços encontrados
+    console.log(`💰 [Prices] Preços: R$${parsed.prices.min_price} - R$${parsed.prices.suggested_price} - R$${parsed.prices.max_price}`);
+    
+    // Log dos anúncios encontrados (se houver)
+    if (parsed.ads && parsed.ads.length > 0) {
+      console.log(`🔗 [Prices] ${parsed.ads.length} anúncios encontrados:`);
+      parsed.ads.forEach((ad, index) => {
+        console.log(`   ${index + 1}. R$${ad.price} - ${ad.link}`);
+      });
+    } else {
+      console.log('🔗 [Prices] Nenhum anúncio específico retornado pelo Gemini');
+    }
+    
     return parsed;
 
   } catch (err) {
@@ -661,6 +679,20 @@ IMPORTANTE: Use valores numéricos reais, nunca null.`;
             typeof parsed2.prices.suggested_price === 'number' && 
             typeof parsed2.prices.max_price === 'number') {
           console.log('✅ [Gemini:prices] Sucesso na segunda tentativa');
+          
+          // Log dos preços da segunda tentativa
+          console.log(`💰 [Prices] Preços (2ª tentativa): R$${parsed2.prices.min_price} - R$${parsed2.prices.suggested_price} - R$${parsed2.prices.max_price}`);
+          
+          // Log dos anúncios encontrados (se houver)
+          if (parsed2.ads && parsed2.ads.length > 0) {
+            console.log(`🔗 [Prices] ${parsed2.ads.length} anúncios encontrados:`);
+            parsed2.ads.forEach((ad, index) => {
+              console.log(`   ${index + 1}. R$${ad.price} - ${ad.link}`);
+            });
+          } else {
+            console.log('🔗 [Prices] Nenhum anúncio específico retornado pelo Gemini (2ª tentativa)');
+          }
+          
           return parsed2;
         }
       }

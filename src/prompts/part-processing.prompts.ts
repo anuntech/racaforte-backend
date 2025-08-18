@@ -7,7 +7,7 @@ export function buildPricesPrompt(
   vehicleYear: number
 ): string {
   const description = partDescription ? ` ${partDescription}` : '';
-  return `Realize uma busca no mercado livre para encontrar o melhor preço para a peça (usada) ${partName}${description} do veículo ${vehicleBrand} ${vehicleModel} ${vehicleYear}.
+  return `Realize uma busca no mercado livre para encontrar o melhor preço para a peça ${partName}${description} do veículo ${vehicleBrand} ${vehicleModel} ${vehicleYear}. Também forneça os links dos anúncios que você encontrou.
 
 Retorne JSON:
 {
@@ -15,7 +15,13 @@ Retorne JSON:
     "min_price": preco_min_numero,
     "suggested_price": preco_sugerido_numero,
     "max_price": preco_max_numero
-  }
+  },
+  "ads": [
+    {
+      "link": "link_do_anuncio",
+      "price": preco_numero
+    }
+  ]
 }
 
 Retorne APENAS o JSON válido.`;
