@@ -7,7 +7,7 @@ export function buildPricesPrompt(
   vehicleYear: number
 ): string {
   const description = partDescription ? ` ${partDescription}` : '';
-  return `Realize uma busca no mercado livre para encontrar o melhor preço para a peça ${partName}${description} do veículo ${vehicleBrand} ${vehicleModel} ${vehicleYear}. Também forneça os links dos anúncios que você encontrou.
+  return `Realize uma busca SOMENTE NO MERCADO LIVRE para encontrar o melhor preço para a peça ${partName}${description} do veículo ${vehicleBrand} ${vehicleModel} ${vehicleYear}. Também forneça os links dos anúncios que você encontrou.
 
 Retorne JSON:
 {
