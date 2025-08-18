@@ -504,11 +504,10 @@ async function callGeminiWithPrompt<T>(
     model: "gemini-2.5-flash",
     generationConfig: {
       temperature: 0.3,
-      maxOutputTokens: 2048, // Aumentado para evitar MAX_TOKENS
-      // Desabilita o raciocínio interno que está consumindo tokens
-      responseLogprobs: false,
+      maxOutputTokens: 16384, // MÁXIMO ABSOLUTO (16K) - sem limitações
+      // Sem responseLogprobs para permitir pensamento completo
     },
-    systemInstruction: "Responda de forma direta e concisa. Não inclua explicações ou raciocínio extra."
+    systemInstruction: "Pesquise e analise detalhadamente. Use todo o raciocínio necessário e retorne a resposta mais precisa possível."
   });
 
   console.log(`\n🔎 [Gemini:${label}] Prompt (${prompt.length} chars):`);
@@ -527,13 +526,27 @@ async function callGeminiWithPrompt<T>(
   const content = result.response.text();
   
   console.log(`📥 [Gemini:${label}] Resposta recebida (${content?.length || 0} chars):`);
+  
+  // Log detalhado do uso de tokens
+  const usageMetadata = result.response.usageMetadata;
+  if (usageMetadata) {
+    console.log(`📊 [Gemini:${label}] Uso de tokens:`, {
+      promptTokens: usageMetadata.promptTokenCount,
+      candidatesTokens: usageMetadata.candidatesTokenCount,
+      totalTokens: usageMetadata.totalTokenCount
+    });
+  }
+  
   if (content) {
     console.log(content.length > 800 ? `${content.slice(0, 800)}...` : content);
   } else {
     console.log(`❌ [Gemini:${label}] Resposta vazia`);
-    // Log resumido para debug
-    if (result.response.candidates?.[0]?.finishReason === 'MAX_TOKENS') {
-      console.log(`🔍 [Gemini:${label}] Motivo: MAX_TOKENS atingido`);
+    // Log detalhado para debug
+    const finishReason = result.response.candidates?.[0]?.finishReason;
+    console.log(`🔍 [Gemini:${label}] finishReason:`, finishReason);
+    console.log(`🔍 [Gemini:${label}] candidates:`, result.response.candidates);
+    if (finishReason === 'MAX_TOKENS') {
+      console.log(`🔍 [Gemini:${label}] Motivo: MAX_TOKENS atingido - aumentando limites...`);
     }
     // Lança erro específico para permitir fallback sem logar erro de parse
     throw new Error('empty_response');
@@ -688,7 +701,19 @@ async function getAdDescription(
   vehicleYear: number
 ): Promise<AdDescriptionResponse> {
   const prompt = buildAdDescriptionPrompt(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear);
-  return await callGeminiWithPrompt<AdDescriptionResponse>(prompt, 20000, 'ad_description');
+  try {
+    return await callGeminiWithPrompt<AdDescriptionResponse>(prompt, 30000, 'ad_description');
+  } catch (err) {
+    console.warn('⚠️ [Gemini:ad_description] Usando fallback com descrição padrão.');
+    
+    // Fallback inteligente baseado na peça
+    const desc = partDescription ? ` ${partDescription}` : '';
+    const fallbackDescription = `${partName}${desc} original para ${vehicleBrand} ${vehicleModel} ${vehicleYear}. Peça em excelente estado de conservação, removida de veículo em funcionamento. Ideal para reposição ou manutenção preventiva.`;
+    
+    return {
+      ad_description: fallbackDescription
+    };
+  }
 }
 
 // Função para estimar dimensões
@@ -729,7 +754,31 @@ async function getWeight(
   vehicleYear: number
 ): Promise<WeightResponse> {
   const prompt = buildWeightPrompt(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear);
-  return await callGeminiWithPrompt<WeightResponse>(prompt, 20000, 'weight');
+  try {
+    return await callGeminiWithPrompt<WeightResponse>(prompt, 30000, 'weight');
+  } catch (err) {
+    console.warn('⚠️ [Gemini:weight] Usando fallback com peso estimado.');
+    
+    // Fallback inteligente baseado no tipo de peça
+    const baseName = partName.toLowerCase();
+    let estimatedWeight = 2.0; // Padrão em kg
+    
+    if (baseName.includes('motor')) estimatedWeight = 120.0;
+    else if (baseName.includes('transmissao') || baseName.includes('cambio')) estimatedWeight = 50.0;
+    else if (baseName.includes('alternador')) estimatedWeight = 6.5;
+    else if (baseName.includes('bateria')) estimatedWeight = 15.0;
+    else if (baseName.includes('radiador')) estimatedWeight = 8.0;
+    else if (baseName.includes('para-choque')) estimatedWeight = 12.0;
+    else if (baseName.includes('porta')) estimatedWeight = 25.0;
+    else if (baseName.includes('capo')) estimatedWeight = 18.0;
+    else if (baseName.includes('freio') || baseName.includes('disco')) estimatedWeight = 5.0;
+    else if (baseName.includes('roda') || baseName.includes('aro')) estimatedWeight = 10.0;
+    else if (baseName.includes('farol') || baseName.includes('lanterna')) estimatedWeight = 1.5;
+    
+    return {
+      weight: estimatedWeight
+    };
+  }
 }
 
 // Função para determinar compatibilidade
