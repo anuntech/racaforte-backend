@@ -499,16 +499,16 @@ export async function processPartDataWithGemini(
 // Função auxiliar para fazer chamadas individuais ao Gemini
 async function callGeminiWithPrompt<T>(
   prompt: string,
-  timeoutMs = 10000,
+  timeoutMs = 30000,
   label = 'generic'
 ): Promise<T> {
   const genAI = initializeGemini();
   
   const model = genAI.getGenerativeModel({ 
-    model: "gemini-2.5-flash",
+    model: "gemini-2.5-pro",
     generationConfig: {
       temperature: 0.3,
-      maxOutputTokens: 16384, // MÁXIMO ABSOLUTO (16K) - sem limitações
+      maxOutputTokens: 32768, // MÁXIMO ABSOLUTO AUMENTADO (32K) - sem limitações
       // Sem responseLogprobs para permitir pensamento completo
     },
     systemInstruction: "Pesquise e analise detalhadamente. Use todo o raciocínio necessário e retorne a resposta mais precisa possível."
@@ -582,25 +582,25 @@ async function getPrices(
   // Configuração especial para prices - SEM limitações de tokens
   const genAI = initializeGemini();
   const model = genAI.getGenerativeModel({ 
-    model: "gemini-2.5-flash",
+    model: "gemini-2.5-pro",
     generationConfig: {
       temperature: 0.2, // Mais determinístico para preços
-      maxOutputTokens: 16384, // MÁXIMO ABSOLUTO (16K)
+      maxOutputTokens: 32768, // MÁXIMO ABSOLUTO AUMENTADO (32K)
       // Sem responseLogprobs para permitir pensamento completo
     },
-    systemInstruction: "Pesquise preços reais no mercado brasileiro. Retorne valores numéricos válidos, nunca null. Use dados do Mercado Livre, OLX e lojas de autopeças. Seja DIRETO e CONCISO na resposta - foque apenas no JSON."
+    systemInstruction: "Pesquise preços reais no mercado brasileiro. Retorne valores numéricos válidos, nunca null. Use dados do Mercado Livre, OLX e lojas de autopeças. Pense o quanto for necessário para dar preços precisos."
   });
 
   try {
     console.log(`💰 [Gemini:prices] PRIORIDADE MÁXIMA - Prompt (${prompt.length} chars):`);
     console.log(prompt);
-    console.log('📤 [Gemini:prices] Enviando com configuração especial (maxTokens: 16384, sem limites de pensamento)');
+    console.log('📤 [Gemini:prices] Enviando com configuração PREMIUM (Gemini 2.5 Pro, maxTokens: 32768, timeout: 45s)');
 
     const geminiPromise = model.generateContent([prompt]);
     const timeoutPromise = new Promise<never>((_, reject) => {
       setTimeout(() => {
-        reject(new Error('Gemini timeout após 20000ms'));
-      }, 20000); // Timeout maior para permitir pensamento
+        reject(new Error('Gemini timeout após 45000ms'));
+      }, 45000); // Timeout muito aumentado para Gemini 2.0 Pro
     });
 
     const result = await Promise.race([geminiPromise, timeoutPromise]);
@@ -734,7 +734,7 @@ async function getAdDescription(
 ): Promise<AdDescriptionResponse> {
   const prompt = buildAdDescriptionPrompt(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear);
   try {
-    return await callGeminiWithPrompt<AdDescriptionResponse>(prompt, 30000, 'ad_description');
+    return await callGeminiWithPrompt<AdDescriptionResponse>(prompt, 45000, 'ad_description');
   } catch (err) {
     console.warn('⚠️ [Gemini:ad_description] Usando fallback com descrição padrão.');
     
@@ -758,11 +758,11 @@ async function getDimensions(
 ): Promise<DimensionsResponse> {
   const prompt = buildDimensionsPrompt(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear);
   try {
-    return await callGeminiWithPrompt<DimensionsResponse>(prompt, 20000, 'dimensions');
+    return await callGeminiWithPrompt<DimensionsResponse>(prompt, 40000, 'dimensions');
   } catch (err) {
     console.warn('⚠️ [Gemini:dimensions] Tentando novamente com timeout maior...');
     try {
-      return await callGeminiWithPrompt<DimensionsResponse>(prompt, 30000, 'dimensions-retry');
+      return await callGeminiWithPrompt<DimensionsResponse>(prompt, 50000, 'dimensions-retry');
     } catch (err2) {
       console.warn('⚠️ [Gemini:dimensions] Retornando fallback com dimensões padrão.');
       return {
@@ -787,7 +787,7 @@ async function getWeight(
 ): Promise<WeightResponse> {
   const prompt = buildWeightPrompt(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear);
   try {
-    return await callGeminiWithPrompt<WeightResponse>(prompt, 30000, 'weight');
+    return await callGeminiWithPrompt<WeightResponse>(prompt, 45000, 'weight');
   } catch (err) {
     console.warn('⚠️ [Gemini:weight] Usando fallback com peso estimado.');
     
@@ -823,7 +823,7 @@ async function getCompatibility(
 ): Promise<CompatibilityResponse> {
   const prompt = buildCompatibilityPrompt(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear);
   try {
-    return await callGeminiWithPrompt<CompatibilityResponse>(prompt, 20000, 'compatibility');
+    return await callGeminiWithPrompt<CompatibilityResponse>(prompt, 40000, 'compatibility');
   } catch (err) {
     if (err instanceof Error && err.message === 'empty_response') {
       console.warn('⚠️ [Gemini:compatibility] Resposta vazia. Usando fallback com veículo original.');
@@ -839,7 +839,7 @@ async function getCompatibility(
     }
     console.warn('⚠️ [Gemini:compatibility] Tentando novamente com timeout maior...');
     try {
-      return await callGeminiWithPrompt<CompatibilityResponse>(prompt, 30000, 'compatibility-retry');
+      return await callGeminiWithPrompt<CompatibilityResponse>(prompt, 50000, 'compatibility-retry');
     } catch (err2) {
       console.warn('⚠️ [Gemini:compatibility] Retornando fallback com veículo original.');
       return {
