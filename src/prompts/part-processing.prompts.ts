@@ -7,24 +7,106 @@ export function buildPricesPrompt(
   vehicleYear: number
 ): string {
   const description = partDescription ? ` ${partDescription}` : '';
-  return `Realize uma busca SOMENTE NO MERCADO LIVRE para encontrar o melhor preço para a peça ${partName}${description} do veículo ${vehicleBrand} ${vehicleModel} ${vehicleYear}. Também forneça os links dos anúncios que você encontrou.
+  return `Você é um agente de pesquisa especializado em Mercado Livre (Brasil). Sua tarefa é encontrar *apenas anúncios de itens USADOS* para a peça especificada e retornar *somente* um JSON válido conforme o esquema fornecido, sem comentários, sem texto adicional e sem markdown.
 
-Retorne JSON:
+## Variáveis de entrada
+
+* partName: nome da peça (ex.: “farol”, “amortecedor”)
+* description: detalhes úteis (ex.: “lado esquerdo”, “original”, “com sensor”)
+* vehicleBrand: marca do veículo (ex.: “Volkswagen”)
+* vehicleModel: modelo do veículo (ex.: “Gol”)
+* vehicleYear: ano do veículo (ex.: “2014”)
+
+Forme a consulta de busca com:
+
+${partName} ${description} ${vehicleBrand} ${vehicleModel} ${vehicleYear}
+
+
+(ignorando campos vazios).
+
+## Restrições obrigatórias
+
+1. *Busque apenas no Mercado Livre Brasil*: domínios permitidos
+
+   * https://lista.mercadolivre.com.br/…
+   * https://produto.mercadolivre.com.br/…
+2. *Condição do item: USADO*. Ignore anúncios “Novo”, recondicionados ou genéricos sem condição clara.
+3. Considere apenas *preço à vista* do produto (sem frete, sem juros de parcelamento, sem descontos de cupons).
+4. *Moeda BRL*. Converta os valores para número decimal com ponto (ex.: 1234.56), removendo R$, pontos de milhar e vírgulas decimais.
+5. *Evite duplicatas*: dedupe por ID do anúncio (ex.: “MLB” no link) e por mesmo título+preço.
+6. *Relevância*: o título deve conter a peça e (preferencialmente) o modelo/ano ou compatibilidade claramente relacionada. Descarte resultados de outras peças, kits que distorcem preço, ou anúncios sem relação clara.
+7. *Somente Brasil* (ignore vendedores de outros países).
+
+## Procedimento de busca
+
+1. Monte a URL de resultados do Mercado Livre com a consulta. Aplique filtro de *Usado* (quando disponível) e, se necessário, adicione termos como “usado” na busca.
+2. Percorra as primeiras páginas de resultados até coletar *10–30 anúncios válidos* (pare antes se a relevância cair).
+3. Para cada anúncio, abra a página do produto para confirmar:
+
+   * Condição “Usado”
+   * Preço à vista visível
+   * Compatibilidade com {vehicleBrand} {vehicleModel} {vehicleYear} (pelo título/descrição; se houver tabela de compatibilidade, melhor).
+4. Extraia:
+
+   * link (URL canônica do anúncio)
+   * price (número decimal em BRL, à vista)
+5. Limpe e dedupe a lista.
+
+## Cálculo de preços
+
+* min_price: menor preço da amostra válida.
+* max_price: maior preço da amostra válida.
+* suggested_price: *mediana* dos preços válidos (se houver 3+ anúncios);
+  se houver 2 anúncios, use a média simples;
+  se houver 1 anúncio, use o próprio preço.
+* Arredonde para duas casas decimais.
+
+## Saída (obrigatória)
+
+Retorne *APENAS* o JSON válido, exatamente neste formato e ordem de chaves:
+
+
 {
   "prices": {
-    "min_price": preco_min_numero,
-    "suggested_price": preco_sugerido_numero,
-    "max_price": preco_max_numero
+    "min_price": <number>,
+    "suggested_price": <number>,
+    "max_price": <number>
   },
   "ads": [
     {
-      "link": "link_do_anuncio",
-      "price": preco_numero
+      "link": "<string>",
+      "price": <number>
     }
   ]
 }
 
-Retorne APENAS o JSON válido.`;
+
+### Regras de saída
+
+* Não inclua propriedades extras.
+* Se nenhum anúncio válido for encontrado, retorne:
+
+
+{
+  "prices": {
+    "min_price": 0,
+    "suggested_price": 0,
+    "max_price": 0
+  },
+  "ads": []
+}
+
+
+## Qualidade e segurança
+
+* Verifique se todos os link começam com https://produto.mercadolivre.com.br/ e estão ativos.
+* Ignore resultados patrocinados irrelevantes.
+* Remova anúncios de “lotes/kits” quando inviabilizarem a comparação com uma unidade da peça.
+* Preferir anúncios com fotos reais e descrição clara; se houver muitos iguais, mantenha os de melhor reputação do vendedor (quando visível).
+
+## Execução
+
+Agora, execute o procedimento usando as variáveis recebidas e *retorne apenas o JSON* especificado.`;
 }
 
 // Prompt para gerar descrição do anúncio
