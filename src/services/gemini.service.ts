@@ -784,20 +784,15 @@ async function getAdDescription(
   vehicleModel: string,
   vehicleYear: number
 ): Promise<AdDescriptionResponse> {
-  const prompt = buildAdDescriptionPrompt(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear);
-  try {
-    return await callGeminiWithPrompt<AdDescriptionResponse>(prompt, 120000, 'ad_description');
-  } catch (err) {
-    console.warn('⚠️ [Gemini:ad_description] Usando fallback com descrição padrão.');
-    
-    // Fallback inteligente baseado na peça
-    const desc = partDescription ? ` ${partDescription}` : '';
-    const fallbackDescription = `${partName}${desc} original para ${vehicleBrand} ${vehicleModel} ${vehicleYear}. Peça em excelente estado de conservação, removida de veículo em funcionamento. Ideal para reposição ou manutenção preventiva.`;
-    
-    return {
-      ad_description: fallbackDescription
-    };
-  }
+  console.log('⚡ [Fallback:ad_description] Usando fallback direto para acelerar resposta');
+  
+  // Fallback inteligente baseado na peça - SEM GEMINI para acelerar
+  const desc = partDescription ? ` ${partDescription}` : '';
+  const fallbackDescription = `${partName}${desc} original para ${vehicleBrand} ${vehicleModel} ${vehicleYear}. Peça em excelente estado de conservação, removida de veículo em funcionamento. Ideal para reposição ou manutenção preventiva.`;
+  
+  return {
+    ad_description: fallbackDescription
+  };
 }
 
 // Função para estimar dimensões
@@ -808,25 +803,25 @@ async function getDimensions(
   vehicleModel: string,
   vehicleYear: number
 ): Promise<DimensionsResponse> {
-  const prompt = buildDimensionsPrompt(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear);
-  try {
-    return await callGeminiWithPrompt<DimensionsResponse>(prompt, 120000, 'dimensions');
-  } catch (err) {
-    console.warn('⚠️ [Gemini:dimensions] Tentando novamente com timeout maior...');
-    try {
-      return await callGeminiWithPrompt<DimensionsResponse>(prompt, 120000, 'dimensions-retry');
-    } catch (err2) {
-      console.warn('⚠️ [Gemini:dimensions] Retornando fallback com dimensões padrão.');
-      return {
-        dimensions: {
-          width: "20",
-          height: "15",
-          depth: "10",
-          unit: "cm",
-        },
-      };
-    }
+  console.log('⚡ [Fallback:dimensions] Usando fallback direto para acelerar resposta');
+  
+  // Fallback inteligente baseado no tipo de peça - SEM GEMINI para acelerar
+  const partLower = partName.toLowerCase();
+  let dimensions = { width: "20", height: "15", depth: "10", unit: "cm" };
+  
+  if (partLower.includes('para-choque') || partLower.includes('parachoque')) {
+    dimensions = { width: "150", height: "40", depth: "25", unit: "cm" };
+  } else if (partLower.includes('farol') || partLower.includes('lanterna')) {
+    dimensions = { width: "35", height: "25", depth: "20", unit: "cm" };
+  } else if (partLower.includes('retrovisor') || partLower.includes('espelho')) {
+    dimensions = { width: "25", height: "20", depth: "15", unit: "cm" };
+  } else if (partLower.includes('porta') || partLower.includes('portinha')) {
+    dimensions = { width: "120", height: "80", depth: "8", unit: "cm" };
+  } else if (partLower.includes('capô') || partLower.includes('capo')) {
+    dimensions = { width: "150", height: "120", depth: "5", unit: "cm" };
   }
+  
+  return { dimensions };
 }
 
 // Função para estimar peso
@@ -837,32 +832,27 @@ async function getWeight(
   vehicleModel: string,
   vehicleYear: number
 ): Promise<WeightResponse> {
-  const prompt = buildWeightPrompt(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear);
-  try {
-    return await callGeminiWithPrompt<WeightResponse>(prompt, 120000, 'weight');
-  } catch (err) {
-    console.warn('⚠️ [Gemini:weight] Usando fallback com peso estimado.');
-    
-    // Fallback inteligente baseado no tipo de peça
-    const baseName = partName.toLowerCase();
-    let estimatedWeight = 2.0; // Padrão em kg
-    
-    if (baseName.includes('motor')) estimatedWeight = 120.0;
-    else if (baseName.includes('transmissao') || baseName.includes('cambio')) estimatedWeight = 50.0;
-    else if (baseName.includes('alternador')) estimatedWeight = 6.5;
-    else if (baseName.includes('bateria')) estimatedWeight = 15.0;
-    else if (baseName.includes('radiador')) estimatedWeight = 8.0;
-    else if (baseName.includes('para-choque')) estimatedWeight = 12.0;
-    else if (baseName.includes('porta')) estimatedWeight = 25.0;
-    else if (baseName.includes('capo')) estimatedWeight = 18.0;
-    else if (baseName.includes('freio') || baseName.includes('disco')) estimatedWeight = 5.0;
-    else if (baseName.includes('roda') || baseName.includes('aro')) estimatedWeight = 10.0;
-    else if (baseName.includes('farol') || baseName.includes('lanterna')) estimatedWeight = 1.5;
-    
-    return {
-      weight: estimatedWeight
-    };
-  }
+  console.log('⚡ [Fallback:weight] Usando fallback direto para acelerar resposta');
+  
+  // Fallback inteligente baseado no tipo de peça - SEM GEMINI para acelerar
+  const baseName = partName.toLowerCase();
+  let estimatedWeight = 2.0; // Padrão em kg
+  
+  if (baseName.includes('motor')) estimatedWeight = 120.0;
+  else if (baseName.includes('transmissao') || baseName.includes('cambio')) estimatedWeight = 50.0;
+  else if (baseName.includes('alternador')) estimatedWeight = 6.5;
+  else if (baseName.includes('bateria')) estimatedWeight = 15.0;
+  else if (baseName.includes('radiador')) estimatedWeight = 8.0;
+  else if (baseName.includes('para-choque')) estimatedWeight = 12.0;
+  else if (baseName.includes('porta')) estimatedWeight = 25.0;
+  else if (baseName.includes('capo')) estimatedWeight = 18.0;
+  else if (baseName.includes('freio') || baseName.includes('disco')) estimatedWeight = 5.0;
+  else if (baseName.includes('roda') || baseName.includes('aro')) estimatedWeight = 10.0;
+  else if (baseName.includes('farol') || baseName.includes('lanterna')) estimatedWeight = 1.5;
+  
+  return {
+    weight: estimatedWeight
+  };
 }
 
 // Função para determinar compatibilidade
@@ -873,38 +863,18 @@ async function getCompatibility(
   vehicleModel: string,
   vehicleYear: number
 ): Promise<CompatibilityResponse> {
-  const prompt = buildCompatibilityPrompt(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear);
-  try {
-    return await callGeminiWithPrompt<CompatibilityResponse>(prompt, 120000, 'compatibility');
-  } catch (err) {
-    if (err instanceof Error && err.message === 'empty_response') {
-      console.warn('⚠️ [Gemini:compatibility] Resposta vazia. Usando fallback com veículo original.');
-      return {
-        compatibility: [
-          {
-            brand: vehicleBrand,
-            model: vehicleModel,
-            year: String(vehicleYear),
-          },
-        ],
-      };
-    }
-    console.warn('⚠️ [Gemini:compatibility] Tentando novamente com timeout maior...');
-    try {
-      return await callGeminiWithPrompt<CompatibilityResponse>(prompt, 120000, 'compatibility-retry');
-    } catch (err2) {
-      console.warn('⚠️ [Gemini:compatibility] Retornando fallback com veículo original.');
-      return {
-        compatibility: [
-          {
-            brand: vehicleBrand,
-            model: vehicleModel,
-            year: String(vehicleYear),
-          },
-        ],
-      };
-    }
-  }
+  console.log('⚡ [Fallback:compatibility] Usando fallback direto para acelerar resposta');
+  
+  // Fallback simples - SEM GEMINI para acelerar, apenas retorna o veículo original
+  return {
+    compatibility: [
+      {
+        brand: vehicleBrand,
+        model: vehicleModel,
+        year: String(vehicleYear),
+      },
+    ],
+  };
 }
 
 /**
