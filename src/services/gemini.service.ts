@@ -613,13 +613,18 @@ async function getPrices(
       maxOutputTokens: 32768, // MÁXIMO ABSOLUTO AUMENTADO (32K)
       // Sem responseLogprobs para permitir pensamento completo
     },
-    systemInstruction: "Pesquise preços reais no mercado brasileiro. Retorne valores numéricos válidos, nunca null. Use dados do Mercado Livre, OLX e lojas de autopeças. Pense o quanto for necessário para dar preços precisos."
+    tools: [
+      {
+        googleSearchRetrieval: {}
+      }
+    ],
+    systemInstruction: "Você tem acesso à busca do Google. SEMPRE use a ferramenta de busca para encontrar preços ATUAIS no Mercado Livre brasileiro. Busque especificamente por 'site:mercadolivre.com.br' + nome da peça + marca + modelo. Retorne preços reais encontrados AGORA, não dados antigos. Retorne valores numéricos válidos, nunca null."
   });
 
   try {
     console.log(`💰 [Gemini:prices] PRIORIDADE MÁXIMA - Prompt (${prompt.length} chars):`);
     console.log(prompt);
-    console.log('📤 [Gemini:prices] Enviando com configuração PREMIUM (Gemini 2.5 Pro, maxTokens: 32768, timeout: 2min)');
+    console.log('📤 [Gemini:prices] Enviando com configuração PREMIUM + BUSCA WEB (Gemini 2.5 Pro, maxTokens: 32768, timeout: 2min)');
 
     const geminiPromise = model.generateContent([prompt]);
     const timeoutPromise = new Promise<never>((_, reject) => {

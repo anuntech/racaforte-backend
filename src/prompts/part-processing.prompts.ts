@@ -37,11 +37,13 @@ ${partName} ${description} ${vehicleBrand} ${vehicleModel} ${vehicleYear}
 6. *Relevância*: o título deve conter a peça e (preferencialmente) o modelo/ano ou compatibilidade claramente relacionada. Descarte resultados de outras peças, kits que distorcem preço, ou anúncios sem relação clara.
 7. *Somente Brasil* (ignore vendedores de outros países).
 
-## Procedimento de busca
+## Procedimento de busca (OBRIGATÓRIO - USE FERRAMENTAS DE BUSCA)
 
-1. Monte a URL de resultados do Mercado Livre com a consulta. Aplique filtro de *Usado* (quando disponível) e, se necessário, adicione termos como “usado” na busca.
-2. Percorra as primeiras páginas de resultados até coletar *10–30 anúncios válidos* (pare antes se a relevância cair).
-3. Para cada anúncio, abra a página do produto para confirmar:
+**ATENÇÃO:** Você tem acesso à busca do Google. SEMPRE use esta ferramenta.
+
+1. **BUSQUE AGORA** usando ferramentas de busca do Google: "site:mercadolivre.com.br ${partName} ${vehicleBrand} ${vehicleModel} usado"
+2. **ACESSE OS LINKS REAIS** dos primeiros 10-30 resultados encontrados HOJE
+3. Para cada anúncio ATUAL encontrado, confirme:
 
    * Condição “Usado”
    * Preço à vista visível
