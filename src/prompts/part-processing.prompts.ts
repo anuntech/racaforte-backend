@@ -93,7 +93,12 @@ Retorne *APENAS* o JSON válido, exatamente neste formato e ordem de chaves:
     "suggested_price": 0,
     "max_price": 0
   },
-  "ads": []
+  "ads": [
+    {
+      "link": "",
+      "price": 0
+    },
+  ]
 }
 
 
