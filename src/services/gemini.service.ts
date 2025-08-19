@@ -527,9 +527,14 @@ async function callGeminiWithPrompt<T>(
   });
 
   const result = await Promise.race([geminiPromise, timeoutPromise]);
-  const content = result.response.text();
+  let content = result.response.text();
+  
+  // Verificar se o Gemini está "pensando" (thoughts) sem retornar conteúdo ainda
+  const finishReason = result.response.candidates?.[0]?.finishReason;
+  const thoughtsTokenCount = (result.response.usageMetadata as {thoughtsTokenCount?: number})?.thoughtsTokenCount || 0;
   
   console.log(`📥 [Gemini:${label}] Resposta recebida (${content?.length || 0} chars):`);
+  console.log(`🧠 [Gemini:${label}] ThoughtsTokens: ${thoughtsTokenCount}, FinishReason: ${finishReason}`);
   
   // Log detalhado do uso de tokens
   const usageMetadata = result.response.usageMetadata;
@@ -541,12 +546,32 @@ async function callGeminiWithPrompt<T>(
     });
   }
   
+  // Se não há conteúdo mas o Gemini está "pensando", aguardar mais tempo
+  if (!content && finishReason === 'STOP' && thoughtsTokenCount > 0) {
+    console.log(`🤔 [Gemini:${label}] Gemini está processando internamente, aguardando resposta real...`);
+    
+    // Fazer uma nova tentativa aguardando mais tempo para o processamento interno
+    const extendedPromise = model.generateContent([prompt]);
+    const extendedTimeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`Gemini timeout estendido após ${timeoutMs + 60000}ms`));
+      }, timeoutMs + 60000); // +1 minuto extra para aguardar o processamento interno
+    });
+    
+    try {
+      const extendedResult = await Promise.race([extendedPromise, extendedTimeoutPromise]);
+      content = extendedResult.response.text();
+      console.log(`📥 [Gemini:${label}] Resposta real recebida após processamento (${content?.length || 0} chars):`);
+    } catch (extendedErr) {
+      console.warn(`⚠️ [Gemini:${label}] Timeout mesmo aguardando processamento interno`);
+    }
+  }
+  
   if (content) {
     console.log(content.length > 800 ? `${content.slice(0, 800)}...` : content);
   } else {
     console.log(`❌ [Gemini:${label}] Resposta vazia`);
     // Log detalhado para debug
-    const finishReason = result.response.candidates?.[0]?.finishReason;
     console.log(`🔍 [Gemini:${label}] finishReason:`, finishReason);
     console.log(`🔍 [Gemini:${label}] candidates:`, result.response.candidates);
     if (finishReason === 'MAX_TOKENS') {
@@ -604,12 +629,39 @@ async function getPrices(
     });
 
     const result = await Promise.race([geminiPromise, timeoutPromise]);
-    const content = result.response.text();
+    let content = result.response.text();
+    
+    // Verificar se o Gemini está "pensando" (thoughts) sem retornar conteúdo ainda
+    const finishReason = result.response.candidates?.[0]?.finishReason;
+    const thoughtsTokenCount = (result.response.usageMetadata as {thoughtsTokenCount?: number})?.thoughtsTokenCount || 0;
     
     console.log(`📥 [Gemini:prices] Resposta recebida (${content?.length || 0} chars):`);
     console.log(content);
+    console.log(`🧠 [Gemini:prices] ThoughtsTokens: ${thoughtsTokenCount}, FinishReason: ${finishReason}`);
     
-    // Log detalhado do motivo da falha se necessário
+    // Se não há conteúdo mas o Gemini está "pensando", aguardar mais tempo
+    if (!content && finishReason === 'STOP' && thoughtsTokenCount > 0) {
+      console.log('🤔 [Gemini:prices] Gemini está processando internamente, aguardando resposta real...');
+      
+      // Fazer uma nova tentativa aguardando mais tempo para o processamento interno
+      const extendedPromise = model.generateContent([prompt]);
+      const extendedTimeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error('Gemini timeout estendido após 180000ms'));
+        }, 180000); // 3 minutos para aguardar o processamento interno
+      });
+      
+      try {
+        const extendedResult = await Promise.race([extendedPromise, extendedTimeoutPromise]);
+        content = extendedResult.response.text();
+        console.log(`📥 [Gemini:prices] Resposta real recebida após processamento (${content?.length || 0} chars):`);
+        console.log(content);
+      } catch (extendedErr) {
+        console.warn('⚠️ [Gemini:prices] Timeout mesmo aguardando processamento interno');
+      }
+    }
+    
+    // Log detalhado do motivo da falha se ainda não há conteúdo
     if (!content) {
       console.log('🔍 [Gemini:prices] DEBUG - Analisando motivo da resposta vazia:');
       console.log('   result.response.candidates:', result.response.candidates);
