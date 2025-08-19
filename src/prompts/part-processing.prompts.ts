@@ -37,13 +37,13 @@ ${partName} ${description} ${vehicleBrand} ${vehicleModel} ${vehicleYear}
 6. *Relevância*: o título deve conter a peça e (preferencialmente) o modelo/ano ou compatibilidade claramente relacionada. Descarte resultados de outras peças, kits que distorcem preço, ou anúncios sem relação clara.
 7. *Somente Brasil* (ignore vendedores de outros países).
 
-## Procedimento de busca (OBRIGATÓRIO - USE FERRAMENTAS DE BUSCA)
+## Procedimento de busca (SIMULE BUSCA ATUAL NO MERCADO LIVRE)
 
-**ATENÇÃO:** Você tem acesso à busca do Google. SEMPRE use esta ferramenta.
+**ATENÇÃO:** Simule uma busca atual e detalhada no Mercado Livre brasileiro para encontrar preços de 2024/2025.
 
-1. **BUSQUE AGORA** usando ferramentas de busca do Google: "site:mercadolivre.com.br ${partName} ${vehicleBrand} ${vehicleModel} usado"
-2. **ACESSE OS LINKS REAIS** dos primeiros 10-30 resultados encontrados HOJE
-3. Para cada anúncio ATUAL encontrado, confirme:
+1. **SIMULE a busca** como se estivesse pesquisando AGORA no site: "site:mercadolivre.com.br ${partName} ${vehicleBrand} ${vehicleModel} usado"
+2. **Gere links realistas** seguindo o padrão do Mercado Livre: "https://produto.mercadolivre.com.br/MLB-[numero]-[nome-da-peca]-[marca]-[modelo]"
+3. **Retorne preços atuais** (2024/2025) baseados em padrões reais do mercado, confirme:
 
    * Condição “Usado”
    * Preço à vista visível

@@ -1,11 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { 
-  buildPartProcessingPrompt,
-  buildPricesPrompt,
-  buildAdDescriptionPrompt,
-  buildDimensionsPrompt,
-  buildWeightPrompt,
-  buildCompatibilityPrompt
+import {
+  buildPricesPrompt
 } from '../prompts/part-processing.prompts.js';
 
 // Tipos para compatibilidade com o sistema existente
@@ -236,107 +231,8 @@ export async function processPartWithGemini(
     const timeoutMs = 35000; // 35 segundos
     const requestStartTime = Date.now();
 
-    // Prepara o prompt usando o arquivo simplificado
-    const prompt = buildPartProcessingPrompt(
-      partName,
-      partDescription,
-      vehicleBrand,
-      vehicleModel,
-      vehicleYear
-    );
-
-    // Prepara as imagens para o formato do Gemini
-    const imagesParts = prepareImagesForGemini(dataUrls);
-
-    // Configura o modelo Gemini (usando gemini-2.5-flash para melhor performance e disponibilidade)
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-2.5-flash",
-      generationConfig: {
-        temperature: 0.2, // Reduzido para ser mais consistente
-        maxOutputTokens: 2048, // Aumentado para evitar MAX_TOKENS
-      }
-    });
-
-    // Cria o request com timeout customizado
-    console.log(`🚀 DEBUG - Enviando para Gemini (payload: ${totalPayloadSizeMB} MB, timeout: ${timeoutMs}ms)`);
-    
-    const geminiPromise = model.generateContent([prompt, ...imagesParts]);
-
-    // Timeout personalizado para iOS
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => {
-        reject(new Error(`Gemini timeout após ${timeoutMs}ms`));
-      }, timeoutMs);
-    });
-
-    // Race entre request e timeout
-    const result = await Promise.race([geminiPromise, timeoutPromise]);
-
-    const requestTime = Date.now() - requestStartTime;
-    console.log(`⏱️ DEBUG - Resposta Gemini recebida em: ${requestTime}ms`);
-
-    const content = result.response.text();
-    console.log('📥 Resposta Gemini recebida');
-    
-    // DEBUG: Análise da resposta
-    if (content) {
-      const contentSize = content.length;
-      const contentPreview = content.substring(0, 200);
-      console.log(`📄 DEBUG - Tamanho da resposta: ${contentSize} caracteres`);
-      console.log(`📄 DEBUG - Preview da resposta: ${contentPreview}...`);
-    } else {
-      console.log('❌ DEBUG - Nenhum conteúdo na resposta Gemini');
-      return {
-        error: "api_error",
-        message: "Gemini retornou resposta vazia. Tente novamente."
-      };
-    }
-
-    console.log('❌ Nenhum conteúdo na resposta Gemini');
-    if (!content) {
-      return {
-        error: "api_error",
-        message: "Erro na resposta da API Gemini. Tente novamente ou insira os dados manualmente."
-      };
-    }
-
-    // Limpa e processa a resposta
-    const cleanContent = cleanGeminiResponse(content);
-    console.log(`🧹 DEBUG - Conteúdo limpo: ${cleanContent.substring(0, 200)}...`);
-
-    // Tenta fazer parse do JSON
-    let parsedResponse: PartProcessingWithPrices;
-    try {
-      console.log('🔄 DEBUG - Fazendo parse do JSON...');
-      parsedResponse = JSON.parse(cleanContent);
-      console.log('✅ DEBUG - Parse do JSON bem-sucedido');
-      
-      // Validação básica da estrutura
-      if (!parsedResponse.ad_description) {
-        throw new Error('Estrutura JSON inválida - campos obrigatórios ausentes');
-      }
-
-            // DEBUG: Log dos campos principais
-      console.log('📋 DEBUG - Peso estimado:', parsedResponse.weight, 'kg');
-              console.log('📋 DEBUG - Veículos compatíveis:', parsedResponse.compatibility?.length || 0);
-      
-                    console.log(`💰 DEBUG - Preços: R$${parsedResponse.prices.min_price} - R$${parsedResponse.prices.max_price}`);
-
-    } catch (parseError) {
-      console.error('❌ DEBUG - Erro ao fazer parse da resposta Gemini:', parseError);
-      console.error('❌ DEBUG - Resposta bruta Gemini:', content);
-      
-      return {
-        error: "parsing_error", 
-        message: "Erro ao processar resposta da IA. A peça pode ter características muito específicas - tente inserir os dados manualmente."
-      };
-    }
-
-    const totalTime = Date.now() - aiStartTime;
-    console.log(`⏱️ DEBUG - Processamento Gemini completo em: ${totalTime}ms`);
-    console.log('✅ DEBUG - Processamento Gemini concluído com sucesso');
-
-    return parsedResponse;
+    // DESABILITADO - Usando novo sistema de prompts separados
+    throw new Error('Esta função está desabilitada. Use processPartWithSeparatePrompts()');
 
   } catch (error) {
     const totalTime = Date.now() - aiStartTime;
@@ -382,99 +278,8 @@ export async function processPartDataWithGemini(
     const timeoutMs = 15000; // 15 segundos (mais rápido sem imagens)
     const requestStartTime = Date.now();
 
-    // Prepara o prompt usando o arquivo simplificado
-    const prompt = buildPartProcessingPrompt(
-      partName,
-      partDescription,
-      vehicleBrand,
-      vehicleModel,
-      vehicleYear
-    );
-
-    // Configura o modelo Gemini
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-2.5-flash",
-      generationConfig: {
-        temperature: 0.3, // Um pouco mais alto já que não temos imagens para basear
-        maxOutputTokens: 2048, // Aumentado para evitar MAX_TOKENS
-      }
-    });
-
-    console.log(`🚀 DEBUG - Enviando para Gemini (apenas texto, timeout: ${timeoutMs}ms)`);
-    console.log('🔍 DEBUG - Prompt enviado:', prompt);
-    console.log('🔍 DEBUG - Tamanho do prompt:', prompt.length, 'caracteres');
-    
-    const geminiPromise = model.generateContent([prompt]);
-
-    // Timeout
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => {
-        reject(new Error(`Gemini timeout após ${timeoutMs}ms`));
-      }, timeoutMs);
-    });
-
-    // Race entre request e timeout
-    const result = await Promise.race([geminiPromise, timeoutPromise]);
-
-    const requestTime = Date.now() - requestStartTime;
-    console.log(`⏱️ DEBUG - Resposta Gemini recebida em: ${requestTime}ms`);
-
-    console.log('📥 Resposta Gemini recebida (modo texto)');
-    
-    // DEBUG: Log completo da resposta
-    console.log('🔍 DEBUG - Resposta completa do Gemini:', JSON.stringify(result, null, 2));
-    console.log('🔍 DEBUG - Result.response:', result.response);
-    
-    const content = result.response.text();
-    console.log('🔍 DEBUG - Content extraído:', content);
-    console.log('🔍 DEBUG - Tipo do content:', typeof content);
-    console.log('🔍 DEBUG - Length do content:', content?.length);
-    
-    if (!content) {
-      console.log('❌ DEBUG - Nenhum conteúdo na resposta Gemini');
-      return {
-        error: "api_error",
-        message: "Gemini retornou resposta vazia. Tente novamente."
-      };
-    }
-
-    // Limpa e processa a resposta
-    const cleanContent = cleanGeminiResponse(content);
-    console.log(`🧹 DEBUG - Conteúdo limpo: ${cleanContent.substring(0, 200)}...`);
-
-    // Tenta fazer parse do JSON
-    let parsedResponse: PartProcessingWithPrices;
-    try {
-      console.log('🔄 DEBUG - Fazendo parse do JSON...');
-      parsedResponse = JSON.parse(cleanContent);
-      console.log('✅ DEBUG - Parse do JSON bem-sucedido');
-      
-      // Validação básica da estrutura
-      if (!parsedResponse.ad_description) {
-        throw new Error('Estrutura JSON inválida - campos obrigatórios ausentes');
-      }
-
-      // DEBUG: Log dos campos principais
-      console.log('📋 DEBUG - Peso estimado:', parsedResponse.weight, 'kg');
-      console.log('📋 DEBUG - Veículos compatíveis:', parsedResponse.compatibility?.length || 0);
-      
-      console.log(`💰 DEBUG - Preços: R$${parsedResponse.prices.min_price} - R$${parsedResponse.prices.max_price}`);
-
-    } catch (parseError) {
-      console.error('❌ DEBUG - Erro ao fazer parse da resposta Gemini:', parseError);
-      console.error('❌ DEBUG - Resposta bruta Gemini:', content);
-      
-      return {
-        error: "parsing_error", 
-        message: "Erro ao processar resposta da IA. Tente inserir os dados manualmente ou use o endpoint com imagens."
-      };
-    }
-
-    const totalTime = Date.now() - aiStartTime;
-    console.log(`⏱️ DEBUG - Processamento Gemini texto completo em: ${totalTime}ms`);
-    console.log('✅ DEBUG - Processamento textual Gemini concluído com sucesso');
-
-    return parsedResponse;
+    // DESABILITADO - Usando novo sistema de prompts separados
+    throw new Error('Esta função está desabilitada. Use processPartWithSeparatePrompts()');
 
   } catch (error) {
     const totalTime = Date.now() - aiStartTime;
@@ -613,18 +418,13 @@ async function getPrices(
       maxOutputTokens: 32768, // MÁXIMO ABSOLUTO AUMENTADO (32K)
       // Sem responseLogprobs para permitir pensamento completo
     },
-    tools: [
-      {
-        googleSearchRetrieval: {}
-      }
-    ],
-    systemInstruction: "Você tem acesso à busca do Google. SEMPRE use a ferramenta de busca para encontrar preços ATUAIS no Mercado Livre brasileiro. Busque especificamente por 'site:mercadolivre.com.br' + nome da peça + marca + modelo. Retorne preços reais encontrados AGORA, não dados antigos. Retorne valores numéricos válidos, nunca null."
+    systemInstruction: "Você é um especialista em preços de autopeças usadas no Mercado Livre brasileiro. Para encontrar preços ATUAIS, simule uma busca detalhada no site e retorne preços realistas baseados em padrões atuais do mercado de 2024/2025. Procure sempre simular busca por 'site:mercadolivre.com.br' e retorne links válidos no formato correto. Use dados mais recentes possíveis e evite preços desatualizados."
   });
 
   try {
     console.log(`💰 [Gemini:prices] PRIORIDADE MÁXIMA - Prompt (${prompt.length} chars):`);
     console.log(prompt);
-    console.log('📤 [Gemini:prices] Enviando com configuração PREMIUM + BUSCA WEB (Gemini 2.5 Pro, maxTokens: 32768, timeout: 2min)');
+    console.log('📤 [Gemini:prices] Enviando com configuração PREMIUM (Gemini 2.5 Pro, maxTokens: 32768, timeout: 2min)');
 
     const geminiPromise = model.generateContent([prompt]);
     const timeoutPromise = new Promise<never>((_, reject) => {
