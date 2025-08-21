@@ -11,16 +11,11 @@ export function buildPricesPrompt(
 
 ## Variáveis de entrada
 
-* partName: nome da peça (ex.: “farol”, “amortecedor”)
-* description: detalhes úteis (ex.: “lado esquerdo”, “original”, “com sensor”)
-* vehicleBrand: marca do veículo (ex.: “Volkswagen”)
-* vehicleModel: modelo do veículo (ex.: “Gol”)
-* vehicleYear: ano do veículo (ex.: “2014”)
-
-Forme a consulta de busca com:
-
-${partName} ${description} ${vehicleBrand} ${vehicleModel} ${vehicleYear}
-
+* partName: ${partName}
+* description: ${description}
+* vehicleBrand: ${vehicleBrand}
+* vehicleModel: ${vehicleModel}
+* vehicleYear: ${vehicleYear}
 
 (ignorando campos vazios).
 
@@ -43,7 +38,7 @@ ${partName} ${description} ${vehicleBrand} ${vehicleModel} ${vehicleYear}
 
 1. **SIMULE a busca** como se estivesse pesquisando AGORA no site: "site:mercadolivre.com.br ${partName} ${vehicleBrand} ${vehicleModel} usado"
 2. **Gere links realistas** seguindo o padrão do Mercado Livre: "https://produto.mercadolivre.com.br/MLB-[numero]-[nome-da-peca]-[marca]-[modelo]"
-3. **Retorne preços atuais** (2024/2025) baseados em padrões reais do mercado, confirme:
+3. **Retorne preços atuais** (2025) baseados em padrões reais do mercado, confirme:
 
    * Condição “Usado”
    * Preço à vista visível
@@ -101,7 +96,8 @@ Retorne *APENAS* o JSON válido, exatamente neste formato e ordem de chaves:
 
 ## Qualidade e segurança
 
-* Verifique se todos os link começam com https://produto.mercadolivre.com.br/ e estão ativos.
+* Verifique se todos os link começam com https://produto.mercadolivre.com.br/.
+* Busque apenas anúncios ativos.
 * Ignore resultados patrocinados irrelevantes.
 * Remova anúncios de “lotes/kits” quando inviabilizarem a comparação com uma unidade da peça.
 * Preferir anúncios com fotos reais e descrição clara; se houver muitos iguais, mantenha os de melhor reputação do vendedor (quando visível).

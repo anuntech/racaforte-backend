@@ -5,6 +5,7 @@ import { CreatePartSchema, UpdatePartSchema, ProcessPartSchema, SearchPartCriter
 import type { PartResponse, UpdatePartResponse, DeletePartResponse, ProcessPartResponse, SearchPartCriteriaRequest } from '../schemas/part.schema.js';
 import type { PartCreationResult, ServiceError } from '../services/part.service.js';
 import * as geminiService from '../services/gemini.service.js';
+import * as grokService from '../services/grok.service.js';
 import { generateStandardAdTitle } from '../utils/title-generator.js';
 import * as storageService from '../services/storage.service.js';
 import { PrismaClient } from '../../generated/prisma/index.js';
@@ -936,10 +937,10 @@ export async function processPart(
     console.log('🔄 DEBUG - ETAPA 3/3: Processando com IA...');
 
     // Processa com IA usando apenas dados textuais
-    console.log('🤖 Enviando para processamento com IA (apenas dados)...');
+    console.log('🤖 Enviando para processamento com IA (Grok + Live Search)...');
     const aiStartTime = Date.now();
     
-    const aiResult = await geminiService.processPartWithSeparatePrompts(
+    const aiResult = await grokService.processPartWithGrok(
       validationResult.data.name,
       validationResult.data.description,
       vehicle.brand,
@@ -989,16 +990,24 @@ export async function processPart(
     console.log('🎉 DEBUG - Processamento concluído com sucesso!');
 
     // Resposta de sucesso (com título padronizado)
+    const responseData: any = {
+      ad_title: standardTitle, // Usando título padronizado ao invés do da IA
+      ad_description: aiResult.ad_description,
+      dimensions: aiResult.dimensions,
+      weight: aiResult.weight,
+      compatibility: aiResult.compatibility,
+      prices: aiResult.prices
+    };
+
+    // Adiciona anúncios se encontrados pelo Live Search
+    if (aiResult.ads && aiResult.ads.length > 0) {
+      responseData.ads = aiResult.ads;
+      console.log(`🔗 [Response] Incluindo ${aiResult.ads.length} anúncios do Live Search na resposta`);
+    }
+
     return reply.status(200).send({
       success: true,
-      data: {
-        ad_title: standardTitle, // Usando título padronizado ao invés do da IA
-        ad_description: aiResult.ad_description,
-        dimensions: aiResult.dimensions,
-        weight: aiResult.weight,
-        compatibility: aiResult.compatibility,
-        prices: aiResult.prices
-      }
+      data: responseData
     });
 
   } catch (error) {

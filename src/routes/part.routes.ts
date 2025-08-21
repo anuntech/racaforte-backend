@@ -643,6 +643,17 @@ export async function partRoutes(app: FastifyInstance) {
                     max_price: { type: 'number' }
                   },
                   description: 'Preços sugeridos para venda'
+                },
+                ads: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      link: { type: 'string', description: 'URL do anúncio no Mercado Livre' },
+                      price: { type: 'number', description: 'Preço encontrado no anúncio' }
+                    }
+                  },
+                  description: 'Anúncios encontrados pelo Live Search (opcional)'
                 }
               }
             }
