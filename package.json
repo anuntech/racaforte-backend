@@ -1,8 +1,11 @@
 {
   "name": "racaforte-backend",
   "version": "1.0.0",
+  "description": "Backend para sistema de gerenciamento de peças automotivas com IA integrada",
   "type": "module",
   "main": "dist/server.js",
+  "author": "Equipe Raca Forte",
+  "license": "ISC",
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
@@ -10,7 +13,7 @@
     "railway:build": "prisma generate && tsc",
     "railway:start": "prisma migrate deploy && node dist/server.js",
     "db:up": "docker compose up -d mysql",
-    "db:down": "docker compose down",
+    "db:down": "docker compose down", 
     "db:logs": "docker compose logs mysql -f",
     "db:setup": "npm run db:up && sleep 10 && npm run prisma:migrate && npm run prisma:generate",
     "dev:full": "npm run db:setup && npm run dev",
@@ -20,10 +23,16 @@
     "prisma:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma migrate reset --force && npm run prisma:seed"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
+  "keywords": [
+    "fastify",
+    "typescript", 
+    "prisma",
+    "automotive",
+    "parts-management",
+    "ai-integration",
+    "gemini",
+    "image-processing"
+  ],
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
     "@types/node": "^22.15.21",

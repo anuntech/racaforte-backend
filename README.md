@@ -2,6 +2,28 @@
 
 Backend da aplicação **Raca Forte**, construído com **Fastify**, **TypeScript**, **Prisma ORM** e **MySQL**, projetado para alta performance, escalabilidade e produtividade no desenvolvimento.
 
+## 👥 Desenvolvimento em Equipe
+
+### 📋 Convenções de Código
+- **Idioma**: Comentários e logs em português para facilitar o entendimento da equipe
+- **Tipagem**: TypeScript obrigatório em todos os arquivos
+- **Validação**: Usar Zod schemas para validação de entrada
+- **Estrutura**: Seguir arquitetura em camadas (routes → controllers → services)
+- **Documentação**: OpenAPI/Swagger para todas as rotas
+
+### 🔄 Workflow Recomendado
+1. **Clone**: `git clone <repo> && cd racaforte-backend`
+2. **Instale**: `npm install`
+3. **Environment**: Configure `.env` baseado no `.env.example`
+4. **Setup completo**: `npm run dev:full` (banco + migração + servidor)
+5. **Teste**: Acesse `http://localhost:3333/health`
+
+### 🏗️ Arquitetura do Sistema
+```
+Frontend (Mobile) ↔ Backend API ↔ Database (MySQL) ↔ AI Services (Gemini)
+                                ↔ Storage (AWS S3)
+```
+
 ---
 
 ## 📦 Tecnologias Utilizadas

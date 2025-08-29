@@ -1,11 +1,42 @@
+/**
+ * CAR CONTROLLER - Controlador de Veículos
+ * 
+ * Responsável por gerenciar todas as operações relacionadas a veículos:
+ * - Criação, atualização, busca e remoção de veículos
+ * - Geração de IDs internos únicos
+ * - Validação de dados de entrada
+ * - Tratamento de erros e respostas padronizadas
+ * 
+ * Padrão de resposta:
+ * - Sucesso: { success: true, data: {...} }
+ * - Erro: { success: false, error: { type: string, message: string } }
+ * 
+ * @author Equipe Raca Forte
+ */
+
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import * as carService from '../services/car.service.js';
 import type { CreateCarRequest, UpdateCarRequest, CarParams, CarResponse, CarDetailsResponse, DeleteResponse, InternalIdsResponse, AllCarsResponse, GenerateInternalIdRequest, GenerateInternalIdResponse, CarPartsResponse } from '../schemas/car.schema';
 import { CreateCarSchema, UpdateCarSchema, CarParamsSchema, GenerateInternalIdSchema } from '../schemas/car.schema.js';
 
+/**
+ * Cria um novo veículo no sistema
+ * 
+ * Requisitos:
+ * - brand, model, year, color (obrigatórios)
+ * - internal_id único (obrigatório)
+ * 
+ * Validações:
+ * - Ano entre 1900 e ano atual + 1
+ * - Internal_id deve ser único no sistema
+ * 
+ * @param request - Dados do veículo (brand, model, year, color, internal_id)
+ * @param reply - Resposta HTTP
+ * @returns CarResponse com id e internal_id do veículo criado
+ */
 export async function createCar(request: FastifyRequest, reply: FastifyReply): Promise<CarResponse> {
   try {
-    // Valida os dados de entrada
+    // Valida os dados de entrada usando Zod schema
     const validationResult = CreateCarSchema.safeParse(request.body);
     
     if (!validationResult.success) {
@@ -57,6 +88,13 @@ export async function createCar(request: FastifyRequest, reply: FastifyReply): P
   }
 }
 
+/**
+ * Atualiza dados de um veículo existente
+ * 
+ * @param request - Dados para atualização (brand?, model?, year?, color?)
+ * @param reply - Resposta HTTP com dados completos do veículo atualizado
+ * @returns CarDetailsResponse com todos os dados do veículo
+ */
 export async function updateCar(request: FastifyRequest<{ Params: CarParams }>, reply: FastifyReply): Promise<CarDetailsResponse> {
   try {
     // Valida os parâmetros da URL
@@ -131,6 +169,15 @@ export async function updateCar(request: FastifyRequest<{ Params: CarParams }>, 
   }
 }
 
+/**
+ * Remove um veículo do sistema
+ * 
+ * IMPORTANTE: Remove também todas as peças associadas ao veículo!
+ * 
+ * @param request - URL params com identifier (id ou internal_id)
+ * @param reply - Resposta HTTP confirmando exclusão
+ * @returns DeleteResponse com status de sucesso
+ */
 export async function deleteCar(request: FastifyRequest<{ Params: CarParams }>, reply: FastifyReply): Promise<DeleteResponse> {
   try {
     // Valida os parâmetros da URL
@@ -181,6 +228,13 @@ export async function deleteCar(request: FastifyRequest<{ Params: CarParams }>, 
   }
 }
 
+/**
+ * Busca um veículo específico por ID ou internal_id
+ * 
+ * @param request - URL params com identifier (aceita id UUID ou internal_id)
+ * @param reply - Resposta HTTP com dados completos do veículo
+ * @returns CarDetailsResponse com todas as informações do veículo
+ */
 export async function getCarById(request: FastifyRequest<{ Params: CarParams }>, reply: FastifyReply): Promise<CarDetailsResponse> {
   try {
     // Valida os parâmetros da URL
@@ -241,6 +295,15 @@ export async function getCarById(request: FastifyRequest<{ Params: CarParams }>,
   }
 }
 
+/**
+ * Lista todos os internal_ids de veículos cadastrados
+ * 
+ * Útil para populating dropdowns e validações no frontend.
+ * 
+ * @param request - Requisição HTTP (sem parâmetros)
+ * @param reply - Lista de internal_ids
+ * @returns InternalIdsResponse com array de strings
+ */
 export async function getAllCarInternalIds(request: FastifyRequest, reply: FastifyReply): Promise<InternalIdsResponse> {
   try {
     // Chama o service para buscar todos os internal_ids
@@ -276,6 +339,16 @@ export async function getAllCarInternalIds(request: FastifyRequest, reply: Fasti
   }
 }
 
+/**
+ * Lista todos os veículos cadastrados no sistema
+ * 
+ * Retorna dados completos de todos os veículos para visualização
+ * em tabelas e listagens.
+ * 
+ * @param request - Requisição HTTP (sem parâmetros)
+ * @param reply - Lista completa de veículos
+ * @returns AllCarsResponse com array de veículos
+ */
 export async function getAllCars(request: FastifyRequest, reply: FastifyReply): Promise<AllCarsResponse> {
   try {
     // Chama o service pra buscar todos os carros
@@ -322,6 +395,16 @@ export async function getAllCars(request: FastifyRequest, reply: FastifyReply): 
   }
 }
 
+/**
+ * Gera um internal_id único baseado nos dados do veículo
+ * 
+ * Utiliza algoritmo interno para criar identificador único
+ * baseado em marca, modelo, ano e cor.
+ * 
+ * @param request - Dados básicos do veículo (brand, model, year, color)
+ * @param reply - Internal_id gerado
+ * @returns GenerateInternalIdResponse com internal_id único
+ */
 export async function generateInternalId(request: FastifyRequest, reply: FastifyReply): Promise<GenerateInternalIdResponse> {
   try {
     // Valida os dados de entrada
@@ -375,6 +458,16 @@ export async function generateInternalId(request: FastifyRequest, reply: Fastify
   }
 }
 
+/**
+ * Lista todas as peças associadas a um veículo específico
+ * 
+ * Retorna peças com dados completos incluindo preços, imagens,
+ * descrições de anúncios e informações técnicas.
+ * 
+ * @param request - URL params com identifier do veículo
+ * @param reply - Lista de peças do veículo
+ * @returns CarPartsResponse com array completo de peças
+ */
 export async function getCarParts(request: FastifyRequest, reply: FastifyReply): Promise<CarPartsResponse> {
   try {
     // Valida os parâmetros da URL

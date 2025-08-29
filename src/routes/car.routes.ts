@@ -1,3 +1,25 @@
+/**
+ * CAR ROUTES - Rotas de Gerenciamento de Veículos
+ * 
+ * Define todas as rotas relacionadas ao módulo de veículos:
+ * - POST /car/generate-internal-id - Gera ID interno único
+ * - POST /car - Cria novo veículo
+ * - GET /car/:identifier - Busca veículo específico
+ * - PATCH /car/:identifier - Atualiza veículo
+ * - DELETE /car/:identifier - Remove veículo
+ * - GET /cars/internal-ids - Lista IDs internos
+ * - GET /cars - Lista todos os veículos
+ * - GET /car/:identifier/parts - Lista peças do veículo
+ * 
+ * Todas as rotas incluem:
+ * - Documentação OpenAPI/Swagger
+ * - Validação de entrada com Zod
+ * - Schemas de resposta padronizados
+ * - Tags para organização na documentação
+ * 
+ * @author Equipe Raca Forte
+ */
+
 import type { FastifyInstance } from 'fastify';
 import * as carController from '../controllers/car.controller.js';
 
