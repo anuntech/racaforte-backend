@@ -26,17 +26,21 @@ export function generateStandardAdTitle(
   if (compatibility && compatibility.length > 0) {
     // Pega os anos do primeiro veículo compatível (geralmente é o principal)
     const primaryVehicle = compatibility.find(c => 
+      c && c.brand && c.model && 
       c.brand.toLowerCase() === vehicleBrand.toLowerCase() && 
       c.model.toLowerCase() === vehicleModel.toLowerCase()
     ) || compatibility[0];
     
-    // Limpa os anos - remove qualquer texto entre parênteses e extra
-    const cleanYears = primaryVehicle.year
-      .replace(/\([^)]*\)/g, '') // Remove tudo entre parênteses
-      .replace(/\s+/g, ' ')      // Remove espaços extras
-      .trim();                   // Remove espaços no início/fim
-    
-    years = cleanYears;
+    // Verifica se encontrou um veículo válido e tem o campo year
+    if (primaryVehicle && primaryVehicle.year) {
+      // Limpa os anos - remove qualquer texto entre parênteses e extra
+      const cleanYears = primaryVehicle.year
+        .replace(/\([^)]*\)/g, '') // Remove tudo entre parênteses
+        .replace(/\s+/g, ' ')      // Remove espaços extras
+        .trim();                   // Remove espaços no início/fim
+      
+      years = cleanYears;
+    }
   }
   
   // 4. Monta o título no padrão (sem os símbolos >)

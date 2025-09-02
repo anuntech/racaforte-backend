@@ -394,7 +394,7 @@ async function getPrices(
       throw new Error('invalid_prices');
     }
 
-    console.log('✅ [Grok:prices] Preços válidos obtidos com Live Search');
+    console.log('✅ [Grok:prices] Preços válidos obtidos com webscraping + AI');
     
     // Log dos preços encontrados
     console.log(`💰 [Prices] Preços: R$${result.prices.min_price} - R$${result.prices.suggested_price} - R$${result.prices.max_price}`);
@@ -738,13 +738,13 @@ export async function processPartWithGrok(
   vehicleYear: number
 ): Promise<PartProcessingWithPrices | ProcessingError> {
   
-  console.log(`🤖 [GROK] Iniciando processamento com Grok + Live Search: ${partName}`);
+  console.log(`🤖 [GROK] Iniciando processamento com Grok + Webscraping: ${partName}`);
   console.log(`🚗 Veículo: ${vehicleBrand} ${vehicleModel} ${vehicleYear}`);
   
   try {
     // Executa todas as chamadas em paralelo para melhor performance
-    // PRIORIDADE: Preços com Live Search | Outros: Grok normal (sem live search)
-    console.log('🔄 Executando todas as consultas com Grok (Live Search APENAS para preços)...');
+    // PRIORIDADE: Preços com Webscraping | Outros: Grok normal (sem live search)
+    console.log('🔄 Executando todas as consultas com Grok (Webscraping APENAS para preços)...');
     const [
       pricesResult,
       adDescriptionResult,
@@ -752,7 +752,7 @@ export async function processPartWithGrok(
       weightResult,
       compatibilityResult
     ] = await Promise.all([
-      getPrices(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear), // PRIORIDADE: Com Live Search
+      getPrices(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear), // PRIORIDADE: Com Webscraping
       getAdDescription(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear), // Grok normal
       getDimensions(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear), // Grok normal
       getWeight(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear), // Grok normal
@@ -770,13 +770,13 @@ export async function processPartWithGrok(
       compatibility: compatibilityResult.compatibility
     };
 
-    // Adiciona anúncios se encontrados pelo Live Search
+    // Adiciona anúncios se encontrados pelo webscraping
     if (pricesResult.ads && pricesResult.ads.length > 0) {
       combinedResult.ads = pricesResult.ads;
       console.log(`🔗 [Final] Incluindo ${pricesResult.ads.length} anúncios encontrados na resposta`);
     }
 
-    console.log('✅ Processamento com Grok + Live Search concluído');
+    console.log('✅ Processamento com Grok + Webscraping concluído');
     return combinedResult;
 
   } catch (error) {
