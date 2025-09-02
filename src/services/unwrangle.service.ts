@@ -152,12 +152,14 @@ class UnwrangleService {
 
   /**
    * Format search term for better results
-   * Combines part name with vehicle information
+   * Combines part name with vehicle information including year
    */
-  formatSearchTerm(partName: string, vehicleBrand?: string, vehicleModel?: string): string {
+  formatSearchTerm(partName: string, vehicleBrand?: string, vehicleModel?: string, vehicleYear?: number): string {
     let searchTerm = partName.trim();
     
-    if (vehicleBrand && vehicleModel) {
+    if (vehicleBrand && vehicleModel && vehicleYear) {
+      searchTerm = `${partName} ${vehicleBrand} ${vehicleModel} ${vehicleYear}`;
+    } else if (vehicleBrand && vehicleModel) {
       searchTerm = `${partName} ${vehicleBrand} ${vehicleModel}`;
     } else if (vehicleBrand) {
       searchTerm = `${partName} ${vehicleBrand}`;

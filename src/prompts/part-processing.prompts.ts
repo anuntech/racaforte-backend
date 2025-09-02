@@ -56,18 +56,6 @@ Retorne *APENAS* o JSON válido com TODOS os campos obrigatórios:
   ]
 }
 
-IMPORTANTE: Cada objeto em "ads" DEVE conter exatamente os 3 campos: title, price, url
-
-Se nenhum anúncio relevante for encontrado:
-{
-  "prices": {
-    "min_price": 0,
-    "suggested_price": 0,
-    "max_price": 0
-  },
-  "ads": []
-}
-
 Retorne APENAS o JSON válido, sem comentários ou texto adicional.`;
   }
   

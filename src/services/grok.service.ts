@@ -327,7 +327,7 @@ async function getPrices(
   
   try {
     // Primeiro: buscar dados reais do Mercado Livre via Unwrangle API
-    const searchTerm = unwrangleService.formatSearchTerm(partName, vehicleBrand, vehicleModel);
+    const searchTerm = unwrangleService.formatSearchTerm(partName, vehicleBrand, vehicleModel, vehicleYear);
     console.log(`🔍 [Grok:prices] Buscando no Mercado Livre: "${searchTerm}"`);
     
     const webscrapingResult = await unwrangleService.searchMercadoLivre(searchTerm, 1);
@@ -338,14 +338,32 @@ async function getPrices(
       throw new Error(`Webscraping falhou: ${webscrapingResult.message}`);
     } else {
       console.log(`✅ [Grok:prices] Webscraping bem-sucedido: ${webscrapingResult.result_count} resultados`);
+      
+      // 🔍 LOG COMPLETO DA RESPOSTA UNWRANGLE (dados brutos + tratados)
+      console.log('📊 [DEBUG] RESPOSTA COMPLETA DA API UNWRANGLE:');
+      console.log('=====================================');
+      console.log('🔍 Busca:', webscrapingResult.search);
+      console.log('📊 Total encontrado:', webscrapingResult.total_results);
+      console.log('📦 Esta página:', webscrapingResult.result_count);
+      console.log('💳 Créditos usados:', webscrapingResult.credits_used);
+      console.log('💰 Créditos restantes:', webscrapingResult.remaining_credits);
+      console.log('🛒 RESULTADOS (enviados para AI):');
+      console.log(JSON.stringify(webscrapingResult.results, null, 2));
+      console.log('=====================================');
+      
+      // Mapear TODOS os campos disponíveis da resposta (não apenas alguns)
       webscrapingData = {
         results: webscrapingResult.results.map(item => ({
           name: item.name,
           price: item.price,
           url: item.url,
+          thumbnail: item.thumbnail,
+          brand: item.brand,
           rating: item.rating,
           total_ratings: item.total_ratings,
-          currency_symbol: item.currency_symbol
+          listing_price: item.listing_price,
+          currency_symbol: item.currency_symbol,
+          currency: item.currency
         }))
       };
     }

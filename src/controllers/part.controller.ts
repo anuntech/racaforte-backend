@@ -938,7 +938,8 @@ export async function processPart(
     console.log('🔄 DEBUG - ETAPA 3/3: Processando com IA...');
 
     // Processa com IA usando apenas dados textuais
-    console.log('🤖 Enviando para processamento com IA (Grok + Live Search)...');
+    console.log('🤖 Enviando para processamento com IA (Webscraping + Análise)...');
+    console.log(`🔍 [${requestId}] INICIANDO BUSCA NO MERCADO LIVRE para: "${validationResult.data.name}"`);
     const aiStartTime = Date.now();
     
     const aiResult = await grokService.processPartWithGrok(
