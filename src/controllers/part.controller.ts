@@ -4,8 +4,9 @@ import * as partService from '../services/part.service.js';
 import { CreatePartSchema, UpdatePartSchema, ProcessPartSchema, SearchPartCriteriaSchema } from '../schemas/part.schema.js';
 import type { PartResponse, UpdatePartResponse, DeletePartResponse, ProcessPartResponse, SearchPartCriteriaRequest } from '../schemas/part.schema.js';
 import type { PartCreationResult, ServiceError } from '../services/part.service.js';
-import * as geminiService from '../services/gemini.service.js';
+
 import * as grokService from '../services/grok.service.js';
+import { unwrangleService } from '../services/unwrangle.service.js';
 import { generateStandardAdTitle } from '../utils/title-generator.js';
 import * as storageService from '../services/storage.service.js';
 import { PrismaClient } from '../../generated/prisma/index.js';
@@ -990,7 +991,7 @@ export async function processPart(
     console.log('🎉 DEBUG - Processamento concluído com sucesso!');
 
     // Resposta de sucesso (com título padronizado)
-    const responseData: any = {
+    const responseData: Record<string, unknown> = {
       ad_title: standardTitle, // Usando título padronizado ao invés do da IA
       ad_description: aiResult.ad_description,
       dimensions: aiResult.dimensions,
@@ -999,10 +1000,14 @@ export async function processPart(
       prices: aiResult.prices
     };
 
-    // Adiciona anúncios se encontrados pelo Live Search
-    if (aiResult.ads && aiResult.ads.length > 0) {
+    // Adiciona anúncios se encontrados pelo webscraping + AI
+    if ('ads' in aiResult && aiResult.ads && Array.isArray(aiResult.ads) && aiResult.ads.length > 0) {
       responseData.ads = aiResult.ads;
-      console.log(`🔗 [Response] Incluindo ${aiResult.ads.length} anúncios do Live Search na resposta`);
+      console.log(`🔗 [Response] Incluindo ${aiResult.ads.length} anúncios filtrados pela AI na resposta`);
+    } else {
+      // Sempre incluir o campo ads, mesmo que vazio
+      responseData.ads = [];
+      console.log('🔗 [Response] Nenhum anúncio relevante encontrado - incluindo array vazio');
     }
 
     return reply.status(200).send({
@@ -1154,6 +1159,84 @@ export async function searchPartByCriteria(
   } catch (error) {
     console.error('Erro no controller searchPartByCriteria:', error);
     
+    return reply.status(500).send({
+      success: false,
+      error: {
+        type: 'server_error',
+        message: 'Erro interno do servidor. Tente novamente.'
+      }
+    });
+  }
+}
+
+// Interface for webscrape test request
+interface WebscrapeTestRequest {
+  search_term: string;
+  page?: number;
+}
+
+/**
+ * Test endpoint for Unwrangle API webscraping functionality
+ */
+export async function testWebscrape(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  try {
+    const requestId = Math.random().toString(36).substring(2, 8);
+    console.log(`🧪 [${requestId}] Testing Unwrangle API webscraping...`);
+    
+    const requestBody = request.body as WebscrapeTestRequest;
+    const { search_term, page = 1 } = requestBody;
+    
+    if (!search_term || search_term.trim().length === 0) {
+      return reply.status(400).send({
+        success: false,
+        error: {
+          type: 'validation_error',
+          message: 'Search term is required'
+        }
+      });
+    }
+    
+    console.log(`🔍 [${requestId}] Searching for: "${search_term}" (page ${page})`);
+    const startTime = Date.now();
+    
+    const result = await unwrangleService.searchMercadoLivre(search_term, page);
+    const responseTime = Date.now() - startTime;
+    
+    if ('error' in result) {
+      console.log(`❌ [${requestId}] Webscrape failed:`, result.error, result.message);
+      return reply.status(400).send({
+        success: false,
+        error: {
+          type: result.error,
+          message: result.message
+        }
+      });
+    }
+    
+    console.log(`✅ [${requestId}] Webscrape completed in ${responseTime}ms`);
+    console.log(`📊 [${requestId}] Results: ${result.result_count} items found (${result.total_results} total)`);
+    console.log(`💳 [${requestId}] Credits: ${result.credits_used} used, ${result.remaining_credits} remaining`);
+    
+    return reply.status(200).send({
+      success: true,
+      data: {
+        platform: result.platform,
+        search: result.search,
+        page: result.page,
+        total_results: result.total_results,
+        result_count: result.result_count,
+        results: result.results,
+        credits_used: result.credits_used,
+        remaining_credits: result.remaining_credits,
+        response_time_ms: responseTime
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error in testWebscrape:', error);
     return reply.status(500).send({
       success: false,
       error: {

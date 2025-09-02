@@ -701,4 +701,66 @@ export async function partRoutes(app: FastifyInstance) {
       }
     }
   }, partController.processPart);
+
+  // Test endpoint for Unwrangle API integration
+  app.post('/part/test-webscrape', {
+    schema: {
+      description: 'Test Unwrangle API webscraping functionality',
+      tags: ['Part Management'],
+      consumes: ['application/json'],
+      body: {
+        type: 'object',
+        required: ['search_term'],
+        properties: {
+          search_term: { type: 'string', description: 'Search term for Mercado Livre' },
+          page: { type: 'number', description: 'Page number (default: 1)', minimum: 1 }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                platform: { type: 'string' },
+                search: { type: 'string' },
+                total_results: { type: 'number' },
+                result_count: { type: 'number' },
+                results: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      name: { type: 'string' },
+                      price: { type: 'number' },
+                      currency_symbol: { type: 'string' },
+                      rating: { type: ['number', 'null'] },
+                      total_ratings: { type: ['number', 'null'] }
+                    }
+                  }
+                },
+                credits_used: { type: 'number' },
+                remaining_credits: { type: 'number' }
+              }
+            }
+          }
+        },
+        400: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                type: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, partController.testWebscrape);
 } 

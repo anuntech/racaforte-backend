@@ -2,6 +2,7 @@ import axios from 'axios';
 import {
   buildPricesPrompt
 } from '../prompts/part-processing.prompts.js';
+import { unwrangleService } from './unwrangle.service.js';
 
 // Tipos para compatibilidade com o sistema existente
 interface ProcessingError {
@@ -29,8 +30,9 @@ interface PartProcessingWithPrices {
     max_price: number;
   };
   ads?: Array<{
-    link: string;
+    title: string;
     price: number;
+    url: string;
   }>;
 }
 
@@ -42,8 +44,9 @@ interface PricesResponse {
     max_price: number;
   };
   ads?: Array<{
-    link: string;
+    title: string;
     price: number;
+    url: string;
   }>;
 }
 
@@ -185,7 +188,7 @@ async function callGrokWithPrompt<T>(
       return_citations: boolean;
     };
   } = {
-    model: 'grok-4-0709', // Usando Grok 4
+    model: 'grok-3', // Usando Grok 4
     messages: [
       {
         role: 'system',
@@ -320,20 +323,45 @@ async function getPrices(
   vehicleModel: string,
   vehicleYear: number
 ): Promise<PricesResponse> {
-  const prompt = buildPricesPrompt(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear);
+  console.log('💰 [Grok:prices] Iniciando busca de preços com webscraping + AI');
   
   try {
-    console.log('💰 [Grok:prices] PRIORIDADE MÁXIMA - Usando Live Search para busca de preços atuais');
-    console.log(`💰 [Grok:prices] Prompt (${prompt.length} chars):`);
-    console.log(prompt);
-    console.log('📤 [Grok:prices] Enviando com configuração (Grok 4 + Live Search)');
+    // Primeiro: buscar dados reais do Mercado Livre via Unwrangle API
+    const searchTerm = unwrangleService.formatSearchTerm(partName, vehicleBrand, vehicleModel);
+    console.log(`🔍 [Grok:prices] Buscando no Mercado Livre: "${searchTerm}"`);
+    
+    const webscrapingResult = await unwrangleService.searchMercadoLivre(searchTerm, 1);
+    
+    let webscrapingData;
+    if ('error' in webscrapingResult) {
+      console.error(`❌ [Grok:prices] Erro no webscraping: ${webscrapingResult.message}`);
+      throw new Error(`Webscraping falhou: ${webscrapingResult.message}`);
+    } else {
+      console.log(`✅ [Grok:prices] Webscraping bem-sucedido: ${webscrapingResult.result_count} resultados`);
+      webscrapingData = {
+        results: webscrapingResult.results.map(item => ({
+          name: item.name,
+          price: item.price,
+          url: item.url,
+          rating: item.rating,
+          total_ratings: item.total_ratings,
+          currency_symbol: item.currency_symbol
+        }))
+      };
+    }
 
-    // Usando live search para obter preços atuais do Mercado Livre
+    // Segundo: enviar dados para o AI analisar
+    const prompt = buildPricesPrompt(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear, webscrapingData);
+    
+    console.log('💰 [Grok:prices] Enviando dados de webscraping para AI analisar');
+    console.log(`💰 [Grok:prices] Prompt (${prompt.length} chars)`);
+    console.log('🤖 [Grok:prices] Modo: Análise APENAS de dados reais de webscraping (sem Live Search)');
+
     const result = await callGrokWithPrompt<PricesResponse>(
       prompt,
       120000, // 2 minutos de timeout
       'prices',
-      true // Habilita live search para preços
+      false // NUNCA usar Live Search - apenas análise de dados
     );
     
     // Validação especial para prices - nunca aceitar null
@@ -355,12 +383,13 @@ async function getPrices(
     
     // Log dos anúncios encontrados (se houver)
     if (result.ads && result.ads.length > 0) {
-      console.log(`🔗 [Prices] ${result.ads.length} anúncios encontrados:`);
+      console.log(`🔗 [Prices] ${result.ads.length} anúncios filtrados pela AI:`);
       result.ads.forEach((ad, index) => {
-        console.log(`   ${index + 1}. R$${ad.price} - ${ad.link}`);
+        console.log(`   ${index + 1}. R$${ad.price} - ${ad.title}`);
+        console.log(`      URL: ${ad.url}`);
       });
     } else {
-      console.log('🔗 [Prices] Nenhum anúncio específico retornado pelo Grok');
+      console.log('🔗 [Prices] Nenhum anúncio relevante encontrado pela AI');
     }
     
     return result;

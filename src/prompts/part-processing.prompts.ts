@@ -1,67 +1,45 @@
-// Prompt para buscar preços no Mercado Livre
+// Prompt para analisar preços do Mercado Livre com dados reais de webscraping
 export function buildPricesPrompt(
   partName: string,
   partDescription: string | undefined,
   vehicleBrand: string,
   vehicleModel: string,
-  vehicleYear: number
+  vehicleYear: number,
+  webscrapingData?: { results: Array<{ name: string; price: number; url: string; [key: string]: any }> }
 ): string {
   const description = partDescription ? ` ${partDescription}` : '';
-  return `Você é um agente de pesquisa especializado em Mercado Livre (Brasil). Sua tarefa é encontrar *apenas anúncios de itens USADOS* para a peça especificada e retornar *somente* um JSON válido conforme o esquema fornecido, sem comentários, sem texto adicional e sem markdown.
+  
+  if (webscrapingData && webscrapingData.results.length > 0) {
+    // Novo prompt com dados reais de webscraping
+    return `Você é um especialista em análise de preços de autopeças do Mercado Livre. Analise os dados de webscraping fornecidos e identifique quais anúncios são realmente da peça solicitada, retornando *somente* um JSON válido conforme o esquema fornecido.
 
-## Variáveis de entrada
+## Peça solicitada
+- Nome: ${partName}
+- Descrição: ${description}
+- Veículo: ${vehicleBrand} ${vehicleModel} ${vehicleYear}
 
-* partName: ${partName}
-* description: ${description}
-* vehicleBrand: ${vehicleBrand}
-* vehicleModel: ${vehicleModel}
-* vehicleYear: ${vehicleYear}
+## Dados de webscraping do Mercado Livre
+${JSON.stringify(webscrapingData.results, null, 2)}
 
-(ignorando campos vazios).
+## Sua tarefa
+1. **Filtre os anúncios relevantes**: Analise cada anúncio e identifique quais são realmente da peça "${partName}" para ${vehicleBrand} ${vehicleModel} ${vehicleYear}
+2. **Critérios de filtragem**:
+   - O nome/título deve conter a peça solicitada ou termos similares
+   - Deve ser compatível com a marca/modelo/ano do veículo (ou ser genérico/universal)
+   - Ignore peças de outros veículos incompatíveis
+   - Ignore kits, lotes ou produtos que não sejam a peça específica
+   - Prefira anúncios com condição "usado"
+3. **Calcule preços**:
+   - min_price: menor preço dos anúncios filtrados
+   - max_price: maior preço dos anúncios filtrados  
+   - suggested_price: mediana dos preços (se 3+ anúncios), média (se 2 anúncios), ou o próprio preço (se 1 anúncio)
+4. **Retorne ads filtrados**: Apenas os anúncios que realmente são da peça solicitada, incluindo:
+   - title: nome/título do anúncio
+   - price: preço numérico 
+   - url: URL completa do anúncio
 
-## Restrições obrigatórias
-
-1. *Busque apenas no Mercado Livre Brasil*: domínios permitidos
-
-   * https://lista.mercadolivre.com.br/…
-   * https://produto.mercadolivre.com.br/…
-2. *Condição do item: USADO*. Ignore anúncios “Novo”, recondicionados ou genéricos sem condição clara.
-3. Considere apenas *preço à vista* do produto (sem frete, sem juros de parcelamento, sem descontos de cupons).
-4. *Moeda BRL*. Converta os valores para número decimal com ponto (ex.: 1234.56), removendo R$, pontos de milhar e vírgulas decimais.
-5. *Evite duplicatas*: dedupe por ID do anúncio (ex.: “MLB” no link) e por mesmo título+preço.
-6. *Relevância*: o título deve conter a peça e (preferencialmente) o modelo/ano ou compatibilidade claramente relacionada. Descarte resultados de outras peças, kits que distorcem preço, ou anúncios sem relação clara.
-7. *Somente Brasil* (ignore vendedores de outros países).
-
-## Procedimento de busca (SIMULE BUSCA ATUAL NO MERCADO LIVRE)
-
-**ATENÇÃO:** Simule uma busca atual e detalhada no Mercado Livre brasileiro para encontrar preços de 2024/2025.
-
-1. **SIMULE a busca** como se estivesse pesquisando AGORA no site: "site:mercadolivre.com.br ${partName} ${vehicleBrand} ${vehicleModel} usado"
-2. **Gere links realistas** seguindo o padrão do Mercado Livre: "https://produto.mercadolivre.com.br/MLB-[numero]-[nome-da-peca]-[marca]-[modelo]"
-3. **Retorne preços atuais** (2025) baseados em padrões reais do mercado, confirme:
-
-   * Condição “Usado”
-   * Preço à vista visível
-   * Compatibilidade com {vehicleBrand} {vehicleModel} {vehicleYear} (pelo título/descrição; se houver tabela de compatibilidade, melhor).
-4. Extraia:
-
-   * link (URL canônica do anúncio)
-   * price (número decimal em BRL, à vista)
-5. Limpe e dedupe a lista.
-
-## Cálculo de preços
-
-* min_price: menor preço da amostra válida.
-* max_price: maior preço da amostra válida.
-* suggested_price: *mediana* dos preços válidos (se houver 3+ anúncios);
-  se houver 2 anúncios, use a média simples;
-  se houver 1 anúncio, use o próprio preço.
-* Arredonde para duas casas decimais.
-
-## Saída (obrigatória)
-
-Retorne *APENAS* o JSON válido, exatamente neste formato e ordem de chaves:
-
+## Formato de saída obrigatório
+Retorne *APENAS* o JSON válido com TODOS os campos obrigatórios:
 
 {
   "prices": {
@@ -71,19 +49,16 @@ Retorne *APENAS* o JSON válido, exatamente neste formato e ordem de chaves:
   },
   "ads": [
     {
-      "link": "<string>",
-      "price": <number>
+      "title": "<string: nome completo do anúncio>",
+      "price": <number: preço numérico>,
+      "url": "<string: URL completa do anúncio>"
     }
   ]
 }
 
+IMPORTANTE: Cada objeto em "ads" DEVE conter exatamente os 3 campos: title, price, url
 
-### Regras de saída
-
-* Não inclua propriedades extras.
-* Se nenhum anúncio válido for encontrado, retorne:
-
-
+Se nenhum anúncio relevante for encontrado:
 {
   "prices": {
     "min_price": 0,
@@ -93,18 +68,11 @@ Retorne *APENAS* o JSON válido, exatamente neste formato e ordem de chaves:
   "ads": []
 }
 
-
-## Qualidade e segurança
-
-* Verifique se todos os link começam com https://produto.mercadolivre.com.br/.
-* Busque apenas anúncios ativos.
-* Ignore resultados patrocinados irrelevantes.
-* Remova anúncios de “lotes/kits” quando inviabilizarem a comparação com uma unidade da peça.
-* Preferir anúncios com fotos reais e descrição clara; se houver muitos iguais, mantenha os de melhor reputação do vendedor (quando visível).
-
-## Execução
-
-Agora, execute o procedimento usando as variáveis recebidas e *retorne apenas o JSON* especificado.`;
+Retorne APENAS o JSON válido, sem comentários ou texto adicional.`;
+  }
+  
+  // Se não há dados de webscraping, retornar erro
+  throw new Error('Dados de webscraping são obrigatórios para análise de preços');
 }
 
 // Prompt para gerar descrição do anúncio
