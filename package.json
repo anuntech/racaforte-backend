@@ -13,7 +13,7 @@
     "railway:build": "prisma generate && tsc",
     "railway:start": "prisma migrate deploy && node dist/server.js",
     "db:up": "docker compose up -d mysql",
-    "db:down": "docker compose down", 
+    "db:down": "docker compose down",
     "db:logs": "docker compose logs mysql -f",
     "db:setup": "npm run db:up && sleep 10 && npm run prisma:migrate && npm run prisma:generate",
     "dev:full": "npm run db:setup && npm run dev",
@@ -25,7 +25,7 @@
   },
   "keywords": [
     "fastify",
-    "typescript", 
+    "typescript",
     "prisma",
     "automotive",
     "parts-management",
@@ -50,6 +50,7 @@
     "axios": "^1.9.0",
     "dotenv": "^16.5.0",
     "fastify": "^5.3.3",
+    "openai": "^5.19.1",
     "zod": "^3.25.23"
   },
   "prisma": {

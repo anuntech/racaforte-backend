@@ -1,3 +1,79 @@
+// Tipos para os anúncios filtrados
+interface FilteredAd {
+  title: string;
+  price: number;
+  url: string;
+}
+
+interface FilteredAdsResponse {
+  ads: FilteredAd[];
+}
+
+interface PricesCalculated {
+  min_price: number;
+  suggested_price: number;
+  max_price: number;
+}
+
+interface PricesWithAds {
+  prices: PricesCalculated;
+  ads: FilteredAd[];
+}
+
+// Função que calcula preços automaticamente baseado nos anúncios filtrados pela IA
+export function calculatePricesFromAds(filteredAdsResponse: FilteredAdsResponse): PricesWithAds {
+  const ads = filteredAdsResponse.ads || [];
+  
+  // Se não há anúncios, lança erro
+  if (ads.length === 0) {
+    throw new Error('Nenhum anúncio foi encontrado pela IA');
+  }
+  
+  // Extrai apenas os preços válidos (números positivos)
+  const validPrices = ads
+    .map(ad => ad.price)
+    .filter(price => typeof price === 'number' && price > 0)
+    .sort((a, b) => a - b); // Ordena do menor para o maior
+  
+  // Se não há preços válidos, lança erro
+  if (validPrices.length === 0) {
+    throw new Error('Nenhum preço válido foi encontrado nos anúncios filtrados');
+  }
+  
+  // Calcula preços baseado nos anúncios encontrados
+  const minPrice = validPrices[0]; // Menor preço
+  const maxPrice = validPrices[validPrices.length - 1]; // Maior preço
+  
+  let suggestedPrice: number;
+  
+  if (validPrices.length === 1) {
+    // Se há apenas 1 anúncio, o preço sugerido é o próprio preço
+    suggestedPrice = validPrices[0];
+  } else if (validPrices.length === 2) {
+    // Se há 2 anúncios, o preço sugerido é a média
+    suggestedPrice = Math.round((validPrices[0] + validPrices[1]) / 2);
+  } else {
+    // Se há 3 ou mais anúncios, o preço sugerido é a mediana
+    const middleIndex = Math.floor(validPrices.length / 2);
+    if (validPrices.length % 2 === 0) {
+      // Se número par de elementos, média dos dois do meio
+      suggestedPrice = Math.round((validPrices[middleIndex - 1] + validPrices[middleIndex]) / 2);
+    } else {
+      // Se número ímpar de elementos, elemento do meio
+      suggestedPrice = validPrices[middleIndex];
+    }
+  }
+  
+  return {
+    prices: {
+      min_price: minPrice,
+      suggested_price: suggestedPrice,
+      max_price: maxPrice
+    },
+    ads: ads
+  };
+}
+
 // Prompt para analisar preços do Mercado Livre com dados reais de webscraping
 export function buildPricesPrompt(
   partName: string,
@@ -5,48 +81,25 @@ export function buildPricesPrompt(
   vehicleBrand: string,
   vehicleModel: string,
   vehicleYear: number,
-  webscrapingData?: { results: Array<{ name: string; price: number; url: string; [key: string]: any }> }
+  webscrapingData?: { results: Array<{ name: string; price: number; url: string; thumbnail?: string | null; brand?: string | null; rating?: number | null; total_ratings?: number | null; listing_price?: number | null; currency_symbol?: string | null; currency?: string | null }> }
 ): string {
   const description = partDescription ? ` ${partDescription}` : '';
   
   if (webscrapingData && webscrapingData.results.length > 0) {
     // Novo prompt com dados reais de webscraping
-    return `Você é um especialista em análise de preços de autopeças do Mercado Livre. Analise os dados de webscraping fornecidos e identifique quais anúncios são realmente da peça solicitada, retornando *somente* um JSON válido conforme o esquema fornecido.
+    return `Preciso que você filtre os anúncios abaixo que sejam realmente da peça:
 
-## Peça solicitada
 - Nome: ${partName}
 - Descrição: ${description}
 - Veículo: ${vehicleBrand} ${vehicleModel} ${vehicleYear}
 
-## Dados de webscraping do Mercado Livre
+## Dados dos anúncios
 ${JSON.stringify(webscrapingData.results, null, 2)}
 
-## Sua tarefa
-1. **Filtre os anúncios relevantes**: Analise cada anúncio e identifique quais são realmente da peça "${partName}" para ${vehicleBrand} ${vehicleModel} ${vehicleYear}
-2. **Critérios de filtragem**:
-   - O nome/título deve conter a peça solicitada ou termos similares
-   - Deve ser compatível com a marca/modelo/ano do veículo (ou ser genérico/universal)
-   - Ignore peças de outros veículos incompatíveis
-   - Ignore kits, lotes ou produtos que não sejam a peça específica
-   - Prefira anúncios com condição "usado"
-3. **Calcule preços**:
-   - min_price: menor preço dos anúncios filtrados
-   - max_price: maior preço dos anúncios filtrados  
-   - suggested_price: mediana dos preços (se 3+ anúncios), média (se 2 anúncios), ou o próprio preço (se 1 anúncio)
-4. **Retorne ads filtrados**: Apenas os anúncios que realmente são da peça solicitada, incluindo:
-   - title: nome/título do anúncio
-   - price: preço numérico 
-   - url: URL completa do anúncio
-
 ## Formato de saída obrigatório
-Retorne *APENAS* o JSON válido com TODOS os campos obrigatórios:
+Retorne *APENAS* o JSON válido com TODOS os campos exatamente como o exemplo abaixo:
 
 {
-  "prices": {
-    "min_price": <number>,
-    "suggested_price": <number>,
-    "max_price": <number>
-  },
   "ads": [
     {
       "title": "<string: nome completo do anúncio>",

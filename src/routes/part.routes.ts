@@ -649,11 +649,12 @@ export async function partRoutes(app: FastifyInstance) {
                   items: {
                     type: 'object',
                     properties: {
-                      link: { type: 'string', description: 'URL do anúncio no Mercado Livre' },
-                      price: { type: 'number', description: 'Preço encontrado no anúncio' }
+                      title: { type: 'string' },
+                      price: { type: 'number' },
+                      url: { type: 'string' }
                     }
                   },
-                  description: 'Anúncios encontrados pelo Live Search (opcional)'
+                  description: 'Anúncios relevantes encontrados no Mercado Livre'
                 }
               }
             }

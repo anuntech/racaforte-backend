@@ -5,7 +5,7 @@ import { CreatePartSchema, UpdatePartSchema, ProcessPartSchema, SearchPartCriter
 import type { PartResponse, UpdatePartResponse, DeletePartResponse, ProcessPartResponse, SearchPartCriteriaRequest } from '../schemas/part.schema.js';
 import type { PartCreationResult, ServiceError } from '../services/part.service.js';
 
-import * as grokService from '../services/grok.service.js';
+import * as openaiService from '../services/openai.service.js';
 import { unwrangleService } from '../services/unwrangle.service.js';
 import { generateStandardAdTitle } from '../utils/title-generator.js';
 import * as storageService from '../services/storage.service.js';
@@ -938,11 +938,11 @@ export async function processPart(
     console.log('🔄 DEBUG - ETAPA 3/3: Processando com IA...');
 
     // Processa com IA usando apenas dados textuais
-    console.log('🤖 Enviando para processamento com IA (Webscraping + Análise)...');
+    console.log('🤖 Enviando para processamento com GPT-5 Mini (Webscraping + Análise)...');
     console.log(`🔍 [${requestId}] INICIANDO BUSCA NO MERCADO LIVRE para: "${validationResult.data.name}"`);
     const aiStartTime = Date.now();
     
-    const aiResult = await grokService.processPartWithGrok(
+    const aiResult = await openaiService.processPartWithOpenAI(
       validationResult.data.name,
       validationResult.data.description,
       vehicle.brand,
@@ -951,11 +951,11 @@ export async function processPart(
     );
 
     const aiTime = Date.now() - aiStartTime;
-    console.log(`⏱️ DEBUG - Processamento IA completo em: ${aiTime}ms`);
+    console.log(`⏱️ DEBUG - Processamento GPT-5 Mini completo em: ${aiTime}ms`);
 
     // Verifica se houve erro no processamento IA
     if ('error' in aiResult) {
-      console.log('❌ Erro no processamento IA:', aiResult.error, aiResult.message);
+      console.log('❌ Erro no processamento GPT-5 Mini:', aiResult.error, aiResult.message);
       return reply.status(400).send({
         success: false,
         error: {

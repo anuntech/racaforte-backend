@@ -166,7 +166,7 @@ function safeParseLlmJson<T>(rawContent: string): T {
 // Função auxiliar para fazer chamadas ao Grok
 async function callGrokWithPrompt<T>(
   prompt: string,
-  timeoutMs = 120000, // Timeout padrão de 2 minutos
+  timeoutMs = 90000, // Timeout padrão de 1.5 minutos
   label = 'generic',
   useSearch = false
 ): Promise<T> {
@@ -377,11 +377,22 @@ async function getPrices(
 
     const result = await callGrokWithPrompt<PricesResponse>(
       prompt,
-      120000, // 2 minutos de timeout
+      90000, // 1.5 minutos de timeout
       'prices',
       false // NUNCA usar Live Search - apenas análise de dados
     );
     
+    // Normalizar formato da resposta - AI às vezes retorna "min" ao invés de "min_price"
+    if (result.prices && 'min' in result.prices && !('min_price' in result.prices)) {
+      const normalizedPrices = result.prices as any;
+      result.prices = {
+        min_price: normalizedPrices.min,
+        suggested_price: normalizedPrices.suggested,
+        max_price: normalizedPrices.max
+      };
+      console.log('🔄 [Grok:prices] Formato normalizado: min -> min_price, suggested -> suggested_price, max -> max_price');
+    }
+
     // Validação especial para prices - nunca aceitar null
     if (!result.prices || 
         result.prices.min_price === null || 
@@ -391,6 +402,7 @@ async function getPrices(
         result.prices.suggested_price === undefined || 
         result.prices.max_price === undefined) {
       console.warn('⚠️ [Grok:prices] Resposta contém valores null/undefined, tentando novamente...');
+      console.warn('⚠️ [Grok:prices] Valores recebidos:', JSON.stringify(result.prices, null, 2));
       throw new Error('invalid_prices');
     }
 
@@ -433,7 +445,7 @@ IMPORTANTE: Use valores numéricos reais, nunca null.`;
     try {
       const result2 = await callGrokWithPrompt<PricesResponse>(
         simplePrompt,
-        60000, // 1 minuto de timeout
+        90000, // 1.5 minutos de timeout
         'prices_fallback',
         false // Sem live search no fallback
       );
@@ -516,7 +528,7 @@ Retorne APENAS o JSON:
   try {
     const result = await callGrokWithPrompt<AdDescriptionResponse>(
       prompt,
-      30000, // 30 segundos - processo mais rápido
+      90000, // 1.5 minutos de timeout
       'ad_description',
       false // SEM live search para não afetar prioridade dos preços
     );
@@ -566,7 +578,7 @@ Retorne APENAS o JSON:
   try {
     const result = await callGrokWithPrompt<DimensionsResponse>(
       prompt,
-      30000,
+      90000,
       'dimensions', 
       false // SEM live search
     );
@@ -625,7 +637,7 @@ Retorne APENAS o JSON:
   try {
     const result = await callGrokWithPrompt<WeightResponse>(
       prompt,
-      30000,
+      90000,
       'weight',
       false // SEM live search
     );
@@ -704,7 +716,7 @@ Retorne APENAS o JSON:
   try {
     const result = await callGrokWithPrompt<CompatibilityResponse>(
       prompt,
-      30000,
+      90000,
       'compatibility',
       false // SEM live search
     );
