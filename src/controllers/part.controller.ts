@@ -1020,6 +1020,83 @@ export async function processPart(
     console.error('❌ Erro no controller processPart:', error);
     console.error('Stack trace:', error instanceof Error ? error.stack : 'No stack trace available');
     
+    // Tratamento específico de erros com base no código
+    if (error instanceof Error) {
+      const errorCode = (error as any).code;
+      
+      switch (errorCode) {
+        case 'NO_ADS_FOUND':
+          return reply.status(404).send({
+            success: false,
+            error: {
+              type: 'no_ads_found',
+              message: 'Nenhum anúncio da peça desejada foi encontrado'
+            }
+          });
+          
+        case 'UNWRANGLE_LIMIT_EXCEEDED':
+          return reply.status(403).send({
+            success: false,
+            error: {
+              type: 'unwrangle_limit_exceeded',
+              message: 'Plano do unwrangle passou dos limites'
+            }
+          });
+          
+        case 'WEBSCRAPING_FAILED':
+          return reply.status(503).send({
+            success: false,
+            error: {
+              type: 'webscraping_failed',
+              message: 'Serviço de busca temporariamente indisponível'
+            }
+          });
+          
+        case 'INVALID_PRICES':
+          return reply.status(422).send({
+            success: false,
+            error: {
+              type: 'invalid_prices',
+              message: 'Dados de preços inválidos nos anúncios encontrados'
+            }
+          });
+      }
+      
+      // Erros específicos da API do OpenAI
+      if (error.message.includes('OpenAI API')) {
+        return reply.status(502).send({
+          success: false,
+          error: {
+            type: 'openai_api_error',
+            message: 'Serviço de IA temporariamente indisponível'
+          }
+        });
+      }
+      
+      // Erros de timeout
+      if (error.message.includes('timeout')) {
+        return reply.status(408).send({
+          success: false,
+          error: {
+            type: 'timeout_error',
+            message: 'Processamento demorou mais que o esperado. Tente novamente.'
+          }
+        });
+      }
+      
+      // Erros de chave de API
+      if (error.message.includes('Chave de API inválida') || error.message.includes('API key')) {
+        return reply.status(500).send({
+          success: false,
+          error: {
+            type: 'api_configuration_error',
+            message: 'Erro de configuração do servidor'
+          }
+        });
+      }
+    }
+    
+    // Erro genérico para casos não cobertos
     return reply.status(500).send({
       success: false,
       error: {

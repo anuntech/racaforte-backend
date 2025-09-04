@@ -24,9 +24,11 @@ interface PricesWithAds {
 export function calculatePricesFromAds(filteredAdsResponse: FilteredAdsResponse): PricesWithAds {
   const ads = filteredAdsResponse.ads || [];
   
-  // Se não há anúncios, lança erro
+  // Se não há anúncios, lança erro específico
   if (ads.length === 0) {
-    throw new Error('Nenhum anúncio foi encontrado pela IA');
+    const noAdsError = new Error('Nenhum anúncio da peça desejada foi encontrado');
+    (noAdsError as any).code = 'NO_ADS_FOUND';
+    throw noAdsError;
   }
   
   // Extrai apenas os preços válidos (números positivos)
@@ -35,9 +37,11 @@ export function calculatePricesFromAds(filteredAdsResponse: FilteredAdsResponse)
     .filter(price => typeof price === 'number' && price > 0)
     .sort((a, b) => a - b); // Ordena do menor para o maior
   
-  // Se não há preços válidos, lança erro
+  // Se não há preços válidos, lança erro específico
   if (validPrices.length === 0) {
-    throw new Error('Nenhum preço válido foi encontrado nos anúncios filtrados');
+    const invalidPricesError = new Error('Nenhum preço válido foi encontrado nos anúncios filtrados');
+    (invalidPricesError as any).code = 'INVALID_PRICES';
+    throw invalidPricesError;
   }
   
   // Calcula preços baseado nos anúncios encontrados

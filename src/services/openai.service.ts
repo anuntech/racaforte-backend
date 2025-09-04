@@ -267,7 +267,18 @@ async function getPrices(
     
     if ('error' in webscrapingResult) {
       console.error(`❌ [OpenAI:prices] Erro no webscraping: ${webscrapingResult.message}`);
-      throw new Error(`Webscraping falhou: ${webscrapingResult.message}`);
+      
+      // Tratamento específico para diferentes tipos de erro do Unwrangle
+      if (webscrapingResult.error === 'quota_exceeded') {
+        const unwrangleError = new Error('Plano do unwrangle passou dos limites');
+        (unwrangleError as any).code = 'UNWRANGLE_LIMIT_EXCEEDED';
+        throw unwrangleError;
+      }
+      
+      // Outros erros do webscraping
+      const webscrapeError = new Error(`Erro no webscraping: ${webscrapingResult.message}`);
+      (webscrapeError as any).code = 'WEBSCRAPING_FAILED';
+      throw webscrapeError;
     }
     
     console.log(`✅ [OpenAI:prices] Webscraping bem-sucedido: ${webscrapingResult.result_count} resultados`);
@@ -567,6 +578,12 @@ export async function processPartWithOpenAI(
     console.error('❌ Erro no processamento com GPT-5 Mini:', error);
     
     if (error instanceof Error) {
+      // Propaga erros específicos com código
+      const errorCode = (error as any).code;
+      if (errorCode) {
+        throw error; // Deixa o controller tratar o erro específico
+      }
+      
       if (error.message.includes('timeout')) {
         return {
           error: "openai_timeout",
@@ -574,7 +591,7 @@ export async function processPartWithOpenAI(
         };
       }
       
-      if (error.message.includes('API')) {
+      if (error.message.includes('OpenAI API')) {
         return {
           error: "openai_api_error",
           message: "Erro na API do OpenAI. Verifique sua conexão e chave de API."

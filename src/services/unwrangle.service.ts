@@ -86,7 +86,7 @@ class UnwrangleService {
       console.log(`📤 [${requestId}] Making request to Unwrangle API...`);
       
       const response = await axios.get<UnwrangleResponse>(url, {
-        timeout: 30000, // 30 seconds timeout
+        timeout: 0, // Sem timeout - espera indefinidamente
         headers: {
           'User-Agent': 'RacaForte-Backend/1.0'
         }
@@ -117,19 +117,21 @@ class UnwrangleService {
       console.error(`❌ [${requestId}] Error calling Unwrangle API:`, error);
       
       if (axios.isAxiosError(error)) {
-        if (error.code === 'ECONNABORTED') {
-          return {
-            success: false,
-            error: 'timeout_error',
-            message: 'Request to Unwrangle API timed out'
-          };
-        }
+        // Removido tratamento de timeout já que configuramos timeout: 0
         
         if (error.response?.status === 401) {
           return {
             success: false,
             error: 'authentication_error',
             message: 'Invalid API key for Unwrangle service'
+          };
+        }
+        
+        if (error.response?.status === 403) {
+          return {
+            success: false,
+            error: 'quota_exceeded',
+            message: 'Your credits quota has been consumed, please buy more credits to continue.'
           };
         }
         
