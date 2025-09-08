@@ -584,6 +584,16 @@ export async function partRoutes(app: FastifyInstance) {
       description: 'Processar e gerar dados completos da peça usando IA (apenas dados, sem imagens)',
       tags: ['Part Management'],
       consumes: ['application/json'],
+      querystring: {
+        type: 'object',
+        properties: {
+          searchVehicle: { 
+            type: 'boolean', 
+            description: 'Se true, inclui dados do veículo na busca. Se false, busca apenas pelo nome da peça',
+            default: true
+          }
+        }
+      },
       body: {
         type: 'object',
         required: ['name', 'vehicle_internal_id'],
@@ -673,6 +683,19 @@ export async function partRoutes(app: FastifyInstance) {
             }
           }
         },
+        403: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                type: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
         404: {
           type: 'object',
           properties: {
@@ -686,7 +709,59 @@ export async function partRoutes(app: FastifyInstance) {
             }
           }
         },
+        408: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                type: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        422: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                type: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
         500: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                type: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        502: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            error: {
+              type: 'object',
+              properties: {
+                type: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        503: {
           type: 'object',
           properties: {
             success: { type: 'boolean' },

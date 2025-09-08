@@ -38,13 +38,13 @@ config();
 const app = Fastify({
   logger: true,
   // Configurações de timeout para operações longas (IA, upload de imagens)
-  requestTimeout: 300000, // 5 minutos para requisições complexas
+  requestTimeout: 0, // Sem timeout - espera indefinidamente
   bodyLimit: 104857600, // 100MB para upload de múltiplas imagens
-  keepAliveTimeout: 65000, // 65 segundos - compatibilidade iOS
+  keepAliveTimeout: 0, // Sem timeout - compatibilidade iOS  
   maxRequestsPerSocket: 0, // Sem limite de requests por socket
   
   // Configurações de conexão
-  connectionTimeout: 60000, // 60 segundos para estabelecer conexão
+  connectionTimeout: 0, // Sem timeout para estabelecer conexão
   pluginTimeout: 60000, // 60 segundos para carregar plugins
   trustProxy: true, // Essencial para ngrok/proxy reverso
   ignoreTrailingSlash: true, // Flexibilidade nas URLs

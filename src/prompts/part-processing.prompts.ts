@@ -82,23 +82,36 @@ export function calculatePricesFromAds(filteredAdsResponse: FilteredAdsResponse)
 export function buildPricesPrompt(
   partName: string,
   partDescription: string | undefined,
-  vehicleBrand: string,
-  vehicleModel: string,
-  vehicleYear: number,
+  vehicleBrand: string | null,
+  vehicleModel: string | null,
+  vehicleYear: number | null,
   webscrapingData?: { results: Array<{ name: string; price: number; url: string; thumbnail?: string | null; brand?: string | null; rating?: number | null; total_ratings?: number | null; listing_price?: number | null; currency_symbol?: string | null; currency?: string | null }> }
 ): string {
   const description = partDescription ? ` ${partDescription}` : '';
+  const vehicleInfo = vehicleBrand && vehicleModel && vehicleYear 
+    ? `${vehicleBrand} ${vehicleModel} ${vehicleYear}`
+    : null; // null quando não há dados do veículo
   
   if (webscrapingData && webscrapingData.results.length > 0) {
     // Novo prompt com dados reais de webscraping
+    const vehicleSection = vehicleInfo 
+      ? `- Veículo: ${vehicleInfo}` 
+      : '- Busca: Genérica (qualquer veículo compatível)';
+    
     return `Preciso que você filtre os anúncios abaixo que sejam realmente da peça:
 
 - Nome: ${partName}
 - Descrição: ${description}
-- Veículo: ${vehicleBrand} ${vehicleModel} ${vehicleYear}
+${vehicleSection}
 
 ## Dados dos anúncios
 ${JSON.stringify(webscrapingData.results, null, 2)}
+
+## Instruções de filtragem
+- Se encontrar anúncios da peça solicitada, inclua-os na lista
+- Se NÃO encontrar anúncios compatíveis, retorne um array vazio
+- Seja flexível: aceite variações de nome da peça
+- Ignore incompatibilidades de veículo se a peça for a mesma
 
 ## Formato de saída obrigatório
 Retorne *APENAS* o JSON válido com TODOS os campos exatamente como o exemplo abaixo:
@@ -111,6 +124,11 @@ Retorne *APENAS* o JSON válido com TODOS os campos exatamente como o exemplo ab
       "url": "<string: URL completa do anúncio>"
     }
   ]
+}
+
+**IMPORTANTE: Mesmo se não encontrar anúncios compatíveis, retorne:**
+{
+  "ads": []
 }
 
 Retorne APENAS o JSON válido, sem comentários ou texto adicional.`;

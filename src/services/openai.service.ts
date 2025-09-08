@@ -4,6 +4,7 @@ import {
   calculatePricesFromAds
 } from '../prompts/part-processing.prompts.js';
 import { unwrangleService } from './unwrangle.service.js';
+import { filterUnwrangleAds } from './ad-filtering.service.js';
 
 // Tipos para compatibilidade com o sistema existente
 interface ProcessingError {
@@ -12,6 +13,7 @@ interface ProcessingError {
 }
 
 interface PartProcessingWithPrices {
+  ad_title: string;
   ad_description: string;
   dimensions: {
     width: string;
@@ -75,6 +77,7 @@ interface CompatibilityResponse {
     year: string;
   }>;
 }
+
 
 // Instância compartilhada do OpenAI
 let openaiClient: OpenAI;
@@ -166,26 +169,20 @@ function safeParseLlmJson<T>(rawContent: string): T {
   }
 }
 
-// Função auxiliar para fazer chamadas ao OpenAI
+// Função auxiliar para fazer chamadas ao OpenAI (sem retry, timeout indefinido)
 async function callOpenAIWithPrompt<T>(
   prompt: string,
-  timeoutMs = 90000, // Timeout padrão de 1.5 minutos
+  timeoutMs = 0, // 0 = sem timeout
   label = 'generic'
 ): Promise<T> {
   const client = initializeOpenAI();
   
   console.log(`\n🔎 [OpenAI:${label}] Prompt (${prompt.length} chars):`);
   console.log(prompt.length > 600 ? `${prompt.slice(0, 600)}...` : prompt);
-  console.log(`📤 [OpenAI:${label}] Enviando requisição (timeout: ${timeoutMs}ms)`);
+  console.log(`📤 [OpenAI:${label}] Enviando requisição (timeout: ${timeoutMs === 0 ? 'INDEFINIDO' : timeoutMs + 'ms'})`);
 
   try {
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => {
-        reject(new Error(`OpenAI timeout após ${timeoutMs}ms`));
-      }, timeoutMs);
-    });
-
-    const openaiPromise = client.chat.completions.create({
+    let openaiPromise = client.chat.completions.create({
       model: 'gpt-5-mini', // Usando GPT-5 Mini (mais rápido e econômico)
       messages: [
         {
@@ -200,22 +197,37 @@ async function callOpenAIWithPrompt<T>(
       max_completion_tokens: 4096
     });
 
-    const response = await Promise.race([openaiPromise, timeoutPromise]);
+    // Se timeoutMs > 0, aplica timeout, senão espera indefinidamente
+    let response;
+    if (timeoutMs > 0) {
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error(`OpenAI timeout após ${timeoutMs}ms`));
+        }, timeoutMs);
+      });
+      response = await Promise.race([openaiPromise, timeoutPromise]);
+    } else {
+      response = await openaiPromise;
+    }
     
     if (!response.choices || response.choices.length === 0) {
-      throw new Error('Invalid response from OpenAI API');
+      const invalidResponseError = new Error('Invalid response from OpenAI API');
+      (invalidResponseError as any).code = 'OPENAI_INVALID_RESPONSE';
+      throw invalidResponseError;
     }
 
     const content = response.choices[0].message?.content;
     
     console.log(`📥 [OpenAI:${label}] Resposta recebida (${content?.length || 0} chars):`);
     
-    if (content) {
-      console.log(content.length > 800 ? `${content.slice(0, 800)}...` : content);
-    } else {
+    if (!content || content.trim().length === 0) {
       console.log(`❌ [OpenAI:${label}] Resposta vazia`);
-      throw new Error('empty_response');
+      const emptyResponseError = new Error('Resposta vazia da OpenAI');
+      (emptyResponseError as any).code = 'OPENAI_EMPTY_RESPONSE';
+      throw emptyResponseError;
     }
+
+    console.log(content.length > 800 ? `${content.slice(0, 800)}...` : content);
 
     try {
       const parsed = safeParseLlmJson<T>(content);
@@ -226,47 +238,66 @@ async function callOpenAIWithPrompt<T>(
     } catch (err) {
       console.error(`❌ [OpenAI:${label}] Falha ao parsear JSON do OpenAI:`, err);
       console.error(`❌ [OpenAI:${label}] Conteúdo bruto retornado:`, content);
-      throw err;
+      const jsonParseError = new Error('Resposta JSON inválida');
+      (jsonParseError as any).code = 'OPENAI_INVALID_JSON';
+      throw jsonParseError;
     }
 
   } catch (error) {
     console.error(`❌ [OpenAI:${label}] Erro na requisição:`, error);
     
     if (error instanceof Error) {
+      // Erros específicos
       if (error.message.includes('401')) {
-        throw new Error('OpenAI API: Chave de API inválida');
+        const authError = new Error('OpenAI API: Chave de API inválida');
+        (authError as any).code = 'OPENAI_AUTH_ERROR';
+        throw authError;
       }
       if (error.message.includes('429')) {
-        throw new Error('OpenAI API: Limite de requisições excedido');
+        const rateLimitError = new Error('OpenAI API: Limite de requisições excedido');
+        (rateLimitError as any).code = 'OPENAI_RATE_LIMIT';
+        throw rateLimitError;
       }
       if (error.message.includes('500')) {
-        throw new Error('OpenAI API: Erro interno do servidor');
+        const serverError = new Error('OpenAI API: Erro interno do servidor');
+        (serverError as any).code = 'OPENAI_SERVER_ERROR';
+        throw serverError;
+      }
+      
+      // Se já tem código específico, propaga diretamente
+      if ((error as any).code) {
+        throw error;
       }
     }
     
-    throw error;
+    const genericError = new Error('OpenAI API: Erro na requisição');
+    (genericError as any).code = 'OPENAI_GENERIC_ERROR';
+    throw genericError;
   }
 }
 
-// Função para buscar preços - PRIORIDADE MÁXIMA com Webscraping
+// Função para buscar preços - PRIORIDADE MÁXIMA com Webscraping e Filtragem Personalizada
 async function getPrices(
   partName: string,
   partDescription: string | undefined,
-  vehicleBrand: string,
-  vehicleModel: string,
-  vehicleYear: number
+  vehicleBrand: string | null,
+  vehicleModel: string | null,
+  vehicleYear: number | null,
+  useVehicleInSearch: boolean = true
 ): Promise<PricesResponse> {
-  console.log('💰 [OpenAI:prices] Iniciando busca de preços com webscraping + AI');
+  console.log('💰 [FilteringService:prices] Iniciando busca de preços com webscraping + filtro personalizado');
   
   try {
     // Primeiro: buscar dados reais do Mercado Livre via Unwrangle API
-    const searchTerm = unwrangleService.formatSearchTerm(partName, vehicleBrand, vehicleModel, vehicleYear);
-    console.log(`🔍 [OpenAI:prices] Buscando no Mercado Livre: "${searchTerm}"`);
+    const searchTerm = useVehicleInSearch && vehicleBrand && vehicleModel && vehicleYear 
+      ? unwrangleService.formatSearchTerm(partName, vehicleBrand, vehicleModel, vehicleYear)
+      : partName; // Busca apenas pelo nome da peça se useVehicleInSearch=false
+    console.log(`🔍 [FilteringService:prices] Buscando no Mercado Livre: "${searchTerm}" (useVehicleInSearch: ${useVehicleInSearch})`);
     
     const webscrapingResult = await unwrangleService.searchMercadoLivre(searchTerm, 1);
     
     if ('error' in webscrapingResult) {
-      console.error(`❌ [OpenAI:prices] Erro no webscraping: ${webscrapingResult.message}`);
+      console.error(`❌ [FilteringService:prices] Erro no webscraping: ${webscrapingResult.message}`);
       
       // Tratamento específico para diferentes tipos de erro do Unwrangle
       if (webscrapingResult.error === 'quota_exceeded') {
@@ -281,64 +312,73 @@ async function getPrices(
       throw webscrapeError;
     }
     
-    console.log(`✅ [OpenAI:prices] Webscraping bem-sucedido: ${webscrapingResult.result_count} resultados`);
-    console.log(`💳 [OpenAI:prices] Créditos: ${webscrapingResult.credits_used} usados, ${webscrapingResult.remaining_credits} restantes`);
-    
-    // Mapear TODOS os campos disponíveis da resposta (não apenas alguns)
-    const webscrapingData = {
-      results: webscrapingResult.results.map(item => ({
-        name: item.name,
-        price: item.price,
-        url: item.url,
-        thumbnail: item.thumbnail,
-        brand: item.brand,
-        rating: item.rating,
-        total_ratings: item.total_ratings,
-        listing_price: item.listing_price,
-        currency_symbol: item.currency_symbol,
-        currency: item.currency
-      }))
-    };
+    console.log(`✅ [FilteringService:prices] Webscraping bem-sucedido: ${webscrapingResult.result_count} resultados`);
+    console.log(`💳 [FilteringService:prices] Créditos: ${webscrapingResult.credits_used} usados, ${webscrapingResult.remaining_credits} restantes`);
 
-    // Segundo: enviar dados para o AI analisar
-    const prompt = buildPricesPrompt(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear, webscrapingData);
+    // Log da resposta completa do Unwrangle
+    console.log('📊 [FilteringService:prices] Resposta completa do Unwrangle:');
+    console.log(JSON.stringify(webscrapingResult, null, 2));
     
-    console.log('💰 [OpenAI:prices] Enviando dados de webscraping para AI analisar');
-    console.log(`💰 [OpenAI:prices] Prompt (${prompt.length} chars)`);
-    console.log('🤖 [OpenAI:prices] Modo: Análise APENAS de dados reais de webscraping');
-
-    // A IA agora retorna apenas os anúncios filtrados, não os preços
-    const filteredAdsResult = await callOpenAIWithPrompt<{ ads: Array<{ title: string; price: number; url: string }> }>(
-      prompt,
-      90000, // 1.5 minutos de timeout
-      'prices'
+    // Segundo: usar nosso sistema de filtragem personalizado ao invés da IA
+    console.log('🔍 [FilteringService:prices] Aplicando filtros personalizados aos anúncios...');
+    console.log(`🔍 [FilteringService:prices] useVehicleInSearch: ${useVehicleInSearch}`);
+    console.log(`🔍 [FilteringService:prices] Veículo para filtragem: ${useVehicleInSearch && vehicleBrand ? `${vehicleBrand} ${vehicleModel} ${vehicleYear}` : 'Nenhum (busca genérica)'}`);
+    
+    const filteringResult = filterUnwrangleAds(
+      webscrapingResult.results,
+      partName,
+      partDescription,
+      useVehicleInSearch ? vehicleBrand : null,
+      useVehicleInSearch ? vehicleModel : null,
+      useVehicleInSearch ? vehicleYear : null,
+      {
+        maxPriceVariation: 200, // Permite até 200% de variação do preço mediano
+        minConfidence: 0.3, // Confiança mínima de 30%
+        includeGenericParts: true // Inclui peças universais/genéricas
+      }
     );
     
-    console.log('✅ [OpenAI:prices] Anúncios filtrados pela AI recebidos');
+    console.log('✅ [FilteringService:prices] Filtragem personalizada completa');
+    console.log('📊 [FilteringService:prices] Estatísticas da filtragem:', filteringResult.filteringStats);
+    console.log(`📊 [FilteringService:prices] Anúncios processados: ${filteringResult.totalProcessed}, filtrados: ${filteringResult.totalFiltered}`);
+    
+    // Converter para o formato esperado pelo calculatePricesFromAds
+    const filteredAdsResponse = {
+      ads: filteringResult.ads.map(ad => ({
+        title: ad.title,
+        price: ad.price,
+        url: ad.url
+      }))
+    };
     
     // Calcula preços automaticamente baseado nos anúncios filtrados
-    const result = calculatePricesFromAds(filteredAdsResult);
+    const result = calculatePricesFromAds(filteredAdsResponse);
     
-    console.log('✅ [OpenAI:prices] Preços calculados automaticamente baseado nos anúncios');
+    console.log('✅ [FilteringService:prices] Preços calculados automaticamente baseado nos anúncios filtrados');
     
     // Log dos preços calculados
     console.log(`💰 [Prices] Preços calculados: R$${result.prices.min_price} - R$${result.prices.suggested_price} - R$${result.prices.max_price}`);
     
     // Log dos anúncios encontrados (se houver)
     if (result.ads && result.ads.length > 0) {
-      console.log(`🔗 [Prices] ${result.ads.length} anúncios filtrados pela AI:`);
+      console.log(`🔗 [Prices] ${result.ads.length} anúncios filtrados pelo sistema personalizado:`);
       result.ads.forEach((ad, index) => {
+        const adWithConfidence = filteringResult.ads.find(filteredAd => filteredAd.title === ad.title);
         console.log(`   ${index + 1}. R$${ad.price} - ${ad.title}`);
         console.log(`      URL: ${ad.url}`);
+        if (adWithConfidence) {
+          console.log(`      Confiança: ${(adWithConfidence.confidence * 100).toFixed(1)}%`);
+          console.log(`      Motivos: ${adWithConfidence.matchReasons.join(', ')}`);
+        }
       });
     } else {
-      console.log('🔗 [Prices] Nenhum anúncio relevante encontrado pela AI');
+      console.log('🔗 [Prices] Nenhum anúncio relevante encontrado pelo sistema de filtragem');
     }
     
     return result;
 
   } catch (err) {
-    console.error('❌ [OpenAI:prices] Erro no processamento de preços:', err);
+    console.error('❌ [FilteringService:prices] Erro no processamento de preços:', err);
     throw err; // Propaga o erro ao invés de usar fallback
   }
 }
@@ -347,20 +387,30 @@ async function getPrices(
 async function getAdDescription(
   partName: string,
   partDescription: string | undefined,
-  vehicleBrand: string,
-  vehicleModel: string,
-  vehicleYear: number
+  vehicleBrand: string | null,
+  vehicleModel: string | null,
+  vehicleYear: number | null,
+  useVehicleInPrompt: boolean = true
 ): Promise<AdDescriptionResponse> {
   const desc = partDescription ? ` ${partDescription}` : '';
+  
+  let vehicleSection = '';
+  if (useVehicleInPrompt && vehicleBrand && vehicleModel && vehicleYear) {
+    vehicleSection = `\nVeículo: ${vehicleBrand} ${vehicleModel} ${vehicleYear}`;
+  } else if (!useVehicleInPrompt) {
+    vehicleSection = '\nTipo: Peça automotiva genérica/universal';
+  } else {
+    vehicleSection = '\nCompatibilidade: Múltiplos veículos';
+  }
+  
   const prompt = `Crie uma descrição de anúncio profissional para venda de autopeça usada no Mercado Livre brasileiro.
 
-Peça: ${partName}${desc}
-Veículo: ${vehicleBrand} ${vehicleModel} ${vehicleYear}
+Peça: ${partName}${desc}${vehicleSection}
 
 Requisitos:
 - Descrição atrativa e profissional
 - Mencionar estado de conservação
-- Destacar compatibilidade
+- Destacar compatibilidade${useVehicleInPrompt ? '' : ' (sem mencionar veículo específico)'}
 - Incluir informações técnicas relevantes
 - Máximo 200 palavras
 - Linguagem persuasiva para vendas
@@ -373,7 +423,7 @@ Retorne APENAS o JSON:
   try {
     const result = await callOpenAIWithPrompt<AdDescriptionResponse>(
       prompt,
-      90000, // 1.5 minutos de timeout
+      0, // Sem timeout
       'ad_description'
     );
     
@@ -390,21 +440,31 @@ Retorne APENAS o JSON:
 async function getDimensions(
   partName: string,
   partDescription: string | undefined,
-  vehicleBrand: string,
-  vehicleModel: string,
-  vehicleYear: number
+  vehicleBrand: string | null,
+  vehicleModel: string | null,
+  vehicleYear: number | null,
+  useVehicleInPrompt: boolean = true
 ): Promise<DimensionsResponse> {
   const desc = partDescription ? ` ${partDescription}` : '';
+  
+  let vehicleSection = '';
+  if (useVehicleInPrompt && vehicleBrand && vehicleModel && vehicleYear) {
+    vehicleSection = `\nVeículo: ${vehicleBrand} ${vehicleModel} ${vehicleYear}`;
+  } else if (!useVehicleInPrompt) {
+    vehicleSection = '\nTipo: Peça automotiva genérica';
+  } else {
+    vehicleSection = '\nVeículo: padrão genérico';
+  }
+  
   const prompt = `Estime as dimensões reais da autopeça para embalagem e envio.
 
-Peça: ${partName}${desc}
-Veículo: ${vehicleBrand} ${vehicleModel} ${vehicleYear}
+Peça: ${partName}${desc}${vehicleSection}
 
-Baseado em especificações técnicas reais dessa peça para esse veículo, estime:
+Baseado em especificações técnicas reais dessa peça${useVehicleInPrompt ? ' para esse veículo' : ''}, estime:
 - Largura, altura e profundidade em centímetros
 - Considere dimensões práticas para embalagem
 - Use conhecimento técnico automotivo
-- Seja preciso baseado no modelo específico
+- ${useVehicleInPrompt ? 'Seja preciso baseado no modelo específico' : 'Use dimensões típicas para esse tipo de peça'}
 
 Retorne APENAS o JSON:
 {
@@ -419,7 +479,7 @@ Retorne APENAS o JSON:
   try {
     const result = await callOpenAIWithPrompt<DimensionsResponse>(
       prompt,
-      90000,
+      0, // Sem timeout
       'dimensions'
     );
     
@@ -436,21 +496,31 @@ Retorne APENAS o JSON:
 async function getWeight(
   partName: string,
   partDescription: string | undefined,
-  vehicleBrand: string,
-  vehicleModel: string,
-  vehicleYear: number
+  vehicleBrand: string | null,
+  vehicleModel: string | null,
+  vehicleYear: number | null,
+  useVehicleInPrompt: boolean = true
 ): Promise<WeightResponse> {
   const desc = partDescription ? ` ${partDescription}` : '';
+  
+  let vehicleSection = '';
+  if (useVehicleInPrompt && vehicleBrand && vehicleModel && vehicleYear) {
+    vehicleSection = `\nVeículo: ${vehicleBrand} ${vehicleModel} ${vehicleYear}`;
+  } else if (!useVehicleInPrompt) {
+    vehicleSection = '\nTipo: Peça automotiva genérica';
+  } else {
+    vehicleSection = '\nVeículo: padrão genérico';
+  }
+  
   const prompt = `Estime o peso real da autopeça para cálculo de frete.
 
-Peça: ${partName}${desc}
-Veículo: ${vehicleBrand} ${vehicleModel} ${vehicleYear}
+Peça: ${partName}${desc}${vehicleSection}
 
 Baseado em especificações técnicas reais:
 - Peso aproximado em quilogramas (kg)
 - Considere material e construção da peça
 - Use conhecimento técnico automotivo
-- Seja preciso para o modelo específico
+- ${useVehicleInPrompt ? 'Seja preciso para o modelo específico' : 'Use peso típico para esse tipo de peça'}
 - Retorne número decimal (ex: 2.5)
 
 Retorne APENAS o JSON:
@@ -461,7 +531,7 @@ Retorne APENAS o JSON:
   try {
     const result = await callOpenAIWithPrompt<WeightResponse>(
       prompt,
-      90000,
+      0, // Sem timeout
       'weight'
     );
     
@@ -478,16 +548,14 @@ Retorne APENAS o JSON:
 async function getCompatibility(
   partName: string,
   partDescription: string | undefined,
-  vehicleBrand: string,
-  vehicleModel: string,
-  vehicleYear: number
+  vehicleBrand: string | null,
+  vehicleModel: string | null,
+  vehicleYear: number | null,
+  useVehicleInPrompt: boolean = true
 ): Promise<CompatibilityResponse> {
   const desc = partDescription ? ` ${partDescription}` : '';
-  const prompt = `Determine a compatibilidade real dessa autopeça com outros veículos.
-
-Peça: ${partName}${desc}
-Veículo Original: ${vehicleBrand} ${vehicleModel} ${vehicleYear}
-
+  
+  const baseInstructions = `
 Baseado em conhecimento técnico automotivo:
 - Liste veículos compatíveis (mesma marca/grupo ou intercambiáveis)
 - Considere anos próximos com mesmas especificações
@@ -500,16 +568,32 @@ Retorne APENAS o JSON:
   "compatibility": [
     {
       "brand": "marca",
-      "model": "modelo",
+      "model": "modelo", 
       "year": "ano_ou_intervalo"
     }
   ]
 }`;
 
+  let prompt: string;
+  
+  if (useVehicleInPrompt && vehicleBrand && vehicleModel && vehicleYear) {
+    // Usa veículo específico para compatibilidade
+    prompt = `Determine a compatibilidade real dessa autopeça com outros veículos.
+
+Peça: ${partName}${desc}
+Veículo Original: ${vehicleBrand} ${vehicleModel} ${vehicleYear}${baseInstructions}`;
+  } else {
+    // Busca genérica - não menciona veículo específico
+    prompt = `Determine a compatibilidade dessa autopeça com veículos brasileiros.
+
+Peça: ${partName}${desc}
+Contexto: Busca genérica - liste os veículos mais comuns que usam essa peça no mercado brasileiro${baseInstructions}`;
+  }
+
   try {
     const result = await callOpenAIWithPrompt<CompatibilityResponse>(
       prompt,
-      90000,
+      0, // Sem timeout
       'compatibility'
     );
     
@@ -522,19 +606,78 @@ Retorne APENAS o JSON:
   }
 }
 
+// Função para gerar título do anúncio via IA
+async function getAdTitle(
+  partName: string,
+  partDescription: string | undefined,
+  vehicleBrand: string | null,
+  vehicleModel: string | null,
+  vehicleYear: number | null,
+  useVehicleInPrompt: boolean = true
+): Promise<{ ad_title: string }> {
+  const desc = partDescription ? ` ${partDescription}` : '';
+  
+  let vehicleSection = '';
+  if (useVehicleInPrompt && vehicleBrand && vehicleModel && vehicleYear) {
+    vehicleSection = `\nVeículo Original: ${vehicleBrand} ${vehicleModel} ${vehicleYear}`;
+  } else if (!useVehicleInPrompt) {
+    vehicleSection = '\nTipo: Peça automotiva genérica/universal';
+  }
+  
+  const prompt = `Crie um título otimizado para anúncio de autopeça no Mercado Livre brasileiro.
+
+Peça: ${partName}${desc}${vehicleSection}
+
+Requisitos para o título:
+- Máximo 60 caracteres (limite do Mercado Livre)
+- Incluir nome da peça
+- ${useVehicleInPrompt ? 'Incluir marca e modelo do veículo principal' : 'NÃO mencionar veículo específico (peça genérica/universal)'}
+- ${useVehicleInPrompt ? 'Incluir ano ou faixa de anos se possível' : 'Focar na universalidade da peça'}
+- Linguagem atrativa para vendas
+- Seguir padrão: "${useVehicleInPrompt ? 'Nome da Peça Marca Modelo Ano' : 'Nome da Peça Universal/Genérica'}"
+- Ser direto e claro
+
+Retorne APENAS o JSON:
+{
+  "ad_title": "título_otimizado_aqui"
+}`;
+
+  try {
+    const result = await callOpenAIWithPrompt<{ ad_title: string }>(
+      prompt,
+      0, // Sem timeout
+      'ad_title'
+    );
+    
+    console.log('✅ [OpenAI:ad_title] Título gerado com sucesso');
+    return result;
+    
+  } catch (error) {
+    console.error('❌ [OpenAI:ad_title] Erro na geração do título:', error);
+    throw error;
+  }
+}
+
+
 /**
  * Função principal que processa peça usando OpenAI GPT-5 Mini com prompts separados e Webscraping para preços
  */
 export async function processPartWithOpenAI(
   partName: string,
   partDescription: string | undefined,
-  vehicleBrand: string,
-  vehicleModel: string,
-  vehicleYear: number
+  vehicleBrand: string | null,
+  vehicleModel: string | null,
+  vehicleYear: number | null,
+  useVehicleInSearch: boolean = true
 ): Promise<PartProcessingWithPrices | ProcessingError> {
   
   console.log(`🤖 [OPENAI] Iniciando processamento com GPT-5 Mini + Webscraping: ${partName}`);
-  console.log(`🚗 Veículo: ${vehicleBrand} ${vehicleModel} ${vehicleYear}`);
+  
+  if (vehicleBrand && vehicleModel && vehicleYear) {
+    console.log(`🚗 Veículo: ${vehicleBrand} ${vehicleModel} ${vehicleYear}`);
+  } else {
+    console.log('🚗 Veículo: BUSCA GENÉRICA (sem dados do veículo)');
+  }
   
   try {
     // Executa todas as chamadas em paralelo para melhor performance
@@ -545,20 +688,27 @@ export async function processPartWithOpenAI(
       adDescriptionResult,
       dimensionsResult,
       weightResult,
-      compatibilityResult
+      compatibilityResult,
+      adTitleResult
     ] = await Promise.all([
-      getPrices(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear), // PRIORIDADE: Com Webscraping
-      getAdDescription(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear), // ChatGPT normal
-      getDimensions(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear), // ChatGPT normal
-      getWeight(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear), // ChatGPT normal
-      getCompatibility(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear) // GPT-5 Mini normal
+      getPrices(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear, useVehicleInSearch), // PRIORIDADE: Com Webscraping
+      getAdDescription(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear, useVehicleInSearch), // ChatGPT normal
+      getDimensions(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear, useVehicleInSearch), // ChatGPT normal
+      getWeight(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear, useVehicleInSearch), // ChatGPT normal
+      getCompatibility(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear, useVehicleInSearch), // GPT-5 Mini normal
+      getAdTitle(partName, partDescription, vehicleBrand, vehicleModel, vehicleYear, useVehicleInSearch) // Título em paralelo
     ]);
 
     console.log('✅ Todas as consultas concluídas com GPT-5 Mini');
+    
+    // Sempre usa o título gerado em paralelo (máxima performance)
+    const finalAdTitle = adTitleResult.ad_title;
+    console.log('✅ Usando título gerado em paralelo (máxima velocidade)');
 
     // Combina todos os resultados
     const combinedResult: PartProcessingWithPrices = {
       prices: pricesResult.prices,
+      ad_title: finalAdTitle,
       ad_description: adDescriptionResult.ad_description,
       dimensions: dimensionsResult.dimensions,
       weight: weightResult.weight,

@@ -7,7 +7,6 @@ import type { PartCreationResult, ServiceError } from '../services/part.service.
 
 import * as openaiService from '../services/openai.service.js';
 import { unwrangleService } from '../services/unwrangle.service.js';
-import { generateStandardAdTitle } from '../utils/title-generator.js';
 import * as storageService from '../services/storage.service.js';
 import { PrismaClient } from '../../generated/prisma/index.js';
 
@@ -879,9 +878,13 @@ export async function processPart(
     
     console.log(`🔄 [${requestId}] DEBUG - ETAPA 1/3: Validando dados de entrada...`);
 
-    // Obtém dados do corpo da requisição (JSON)
+    // Obtém dados do corpo da requisição (JSON) e query parameters
     const requestBody = request.body as Record<string, unknown>;
+    const queryParams = request.query as Record<string, unknown>;
+    const searchVehicle = queryParams.searchVehicle !== undefined ? Boolean(queryParams.searchVehicle) : true;
+    
     console.log(`📝 [${requestId}] Dados recebidos:`, requestBody);
+    console.log(`🔍 [${requestId}] Query params:`, { searchVehicle });
 
     // Prepara os dados para validação
     const processData = {
@@ -890,15 +893,24 @@ export async function processPart(
       vehicle_internal_id: requestBody.vehicle_internal_id,
     };
 
-    // Valida os dados usando o schema existente
-    const validationResult = ProcessPartSchema.safeParse(processData);
-    if (!validationResult.success) {
-      const firstError = validationResult.error.errors[0];
+    // vehicle_internal_id é sempre obrigatório (mas searchVehicle controla apenas se é usado na busca)
+    if (!processData.vehicle_internal_id) {
       return reply.status(400).send({
         success: false,
         error: {
           type: 'validation_error',
-          message: firstError.message
+          message: 'vehicle_internal_id é obrigatório'
+        }
+      });
+    }
+
+    // Valida o nome da peça (sempre obrigatório)
+    if (!processData.name || typeof processData.name !== 'string' || processData.name.trim().length === 0) {
+      return reply.status(400).send({
+        success: false,
+        error: {
+          type: 'validation_error',
+          message: 'Nome da peça é obrigatório'
         }
       });
     }
@@ -906,15 +918,15 @@ export async function processPart(
     console.log('✅ DEBUG - ETAPA 1/3 COMPLETA: Dados validados');
     console.log('🔄 DEBUG - ETAPA 2/3: Buscando dados do veículo...');
 
-    // Busca dados do veículo
-    console.log(`🔍 Buscando veículo com ID interno: ${validationResult.data.vehicle_internal_id}`);
+    // Busca dados do veículo (sempre necessário para as funções da IA)
+    console.log(`🔍 Buscando veículo com ID interno: ${processData.vehicle_internal_id}`);
     const dbStartTime = Date.now();
     
     const vehicle = await prisma.car.findFirst({
       where: {
         OR: [
-          { id: validationResult.data.vehicle_internal_id },
-          { internal_id: validationResult.data.vehicle_internal_id }
+          { id: processData.vehicle_internal_id as string },
+          { internal_id: processData.vehicle_internal_id as string }
         ]
       }
     });
@@ -923,7 +935,7 @@ export async function processPart(
     console.log(`⏱️ DEBUG - Consulta banco completa em: ${dbTime}ms`);
 
     if (!vehicle) {
-      console.log('❌ Veículo não encontrado:', validationResult.data.vehicle_internal_id);
+      console.log('❌ Veículo não encontrado:', processData.vehicle_internal_id);
       return reply.status(404).send({
         success: false,
         error: {
@@ -934,20 +946,22 @@ export async function processPart(
     }
 
     console.log('✅ Veículo encontrado:', vehicle.brand, vehicle.model, vehicle.year);
-    console.log('✅ DEBUG - ETAPA 2/3 COMPLETA: Veículo localizado');
+    console.log(`✅ DEBUG - ETAPA 2/3 COMPLETA: Veículo localizado (searchVehicle=${searchVehicle})`);
+    
     console.log('🔄 DEBUG - ETAPA 3/3: Processando com IA...');
 
     // Processa com IA usando apenas dados textuais
     console.log('🤖 Enviando para processamento com GPT-5 Mini (Webscraping + Análise)...');
-    console.log(`🔍 [${requestId}] INICIANDO BUSCA NO MERCADO LIVRE para: "${validationResult.data.name}"`);
+    console.log(`🔍 [${requestId}] INICIANDO BUSCA NO MERCADO LIVRE para: "${processData.name}"`);
     const aiStartTime = Date.now();
     
     const aiResult = await openaiService.processPartWithOpenAI(
-      validationResult.data.name,
-      validationResult.data.description,
+      processData.name as string,
+      processData.description as string,
       vehicle.brand,
       vehicle.model,
-      vehicle.year
+      vehicle.year,
+      searchVehicle // Passa o parâmetro para controlar apenas a busca Unwrangle
     );
 
     const aiTime = Date.now() - aiStartTime;
@@ -967,17 +981,9 @@ export async function processPart(
 
     console.log('✅ Processamento IA concluído com sucesso');
     console.log('✅ DEBUG - ETAPA 3/3 COMPLETA: IA processada');
-    console.log('🔄 DEBUG - Gerando título padronizado...');
-
-    // Gera título padronizado seguindo o padrão do site
-    const standardTitle = generateStandardAdTitle(
-      validationResult.data.name,
-      vehicle.brand,
-      vehicle.model,
-      aiResult.compatibility
-    );
     
-    console.log('📝 DEBUG - Título padronizado:', standardTitle);
+    // Usa o título gerado pela IA (que já considera searchVehicle)
+    console.log('📝 DEBUG - Título gerado via IA:', aiResult.ad_title);
 
     // DEBUG: Análise da resposta final
     const totalTime = Date.now() - startTime;
@@ -991,9 +997,9 @@ export async function processPart(
     console.log(`✅ Processamento de dados completo em ${totalTime}ms`);
     console.log('🎉 DEBUG - Processamento concluído com sucesso!');
 
-    // Resposta de sucesso (com título padronizado)
+    // Resposta de sucesso (com título gerado pela IA)
     const responseData: Record<string, unknown> = {
-      ad_title: standardTitle, // Usando título padronizado ao invés do da IA
+      ad_title: aiResult.ad_title, // Usando título gerado pela IA (considera searchVehicle)
       ad_description: aiResult.ad_description,
       dimensions: aiResult.dimensions,
       weight: aiResult.weight,
@@ -1058,6 +1064,37 @@ export async function processPart(
             error: {
               type: 'invalid_prices',
               message: 'Dados de preços inválidos nos anúncios encontrados'
+            }
+          });
+          
+        case 'OPENAI_EMPTY_RESPONSE':
+          return reply.status(502).send({
+            success: false,
+            error: {
+              type: 'openai_empty_response',
+              message: 'IA retornou resposta vazia após múltiplas tentativas'
+            }
+          });
+          
+        case 'OPENAI_INVALID_JSON':
+          return reply.status(502).send({
+            success: false,
+            error: {
+              type: 'openai_invalid_json',
+              message: 'IA retornou resposta inválida após múltiplas tentativas'
+            }
+          });
+          
+        case 'OPENAI_AUTH_ERROR':
+        case 'OPENAI_RATE_LIMIT':
+        case 'OPENAI_SERVER_ERROR':
+        case 'OPENAI_GENERIC_ERROR':
+        case 'OPENAI_UNEXPECTED_ERROR':
+          return reply.status(502).send({
+            success: false,
+            error: {
+              type: 'openai_api_error',
+              message: 'Serviço de IA temporariamente indisponível'
             }
           });
       }
