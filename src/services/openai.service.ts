@@ -314,10 +314,6 @@ async function getPrices(
     
     console.log(`✅ [FilteringService:prices] Webscraping bem-sucedido: ${webscrapingResult.result_count} resultados`);
     console.log(`💳 [FilteringService:prices] Créditos: ${webscrapingResult.credits_used} usados, ${webscrapingResult.remaining_credits} restantes`);
-
-    // Log da resposta completa do Unwrangle
-    console.log('📊 [FilteringService:prices] Resposta completa do Unwrangle:');
-    console.log(JSON.stringify(webscrapingResult, null, 2));
     
     // Segundo: usar nosso sistema de filtragem personalizado ao invés da IA
     console.log('🔍 [FilteringService:prices] Aplicando filtros personalizados aos anúncios...');

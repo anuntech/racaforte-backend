@@ -99,3 +99,4 @@ testSearchVehicleComparison().then(() => {
   console.error('💥 Erro fatal:', error);
   process.exit(1);
 });
+
