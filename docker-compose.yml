@@ -1,26 +1,91 @@
+version: '3.8'
+
 services:
+  # MySQL Database
   mysql:
     image: mysql:8.0
-    container_name: raca_forte_db_container
+    container_name: raca_forte_db
+    restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: root_password
-      MYSQL_DATABASE: racaforte_db
-      MYSQL_USER: racaforte_user
-      MYSQL_PASSWORD: racaforte_password
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-racaforte_db}
+      MYSQL_USER: ${MYSQL_USER:-racaforte_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-racaforte_password}
     ports:
       - "3306:3306"
     volumes:
       - racaforte_mysql_data:/var/lib/mysql
+      - ./prisma/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
       - raca_forte_network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root_password}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    command: --default-authentication-plugin=mysql_native_password
+
+  # Raca Forte Backend API
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: raca_forte_backend
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=mysql://${MYSQL_USER:-racaforte_user}:${MYSQL_PASSWORD:-racaforte_password}@mysql:3306/${MYSQL_DATABASE:-racaforte_db}
+      - HOST=0.0.0.0
+      - PORT=3333
+      - NODE_ENV=${NODE_ENV:-production}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - UNWRANGLE_API_KEY=${UNWRANGLE_API_KEY}
+      - HETZNER_S3_ENDPOINT=${HETZNER_S3_ENDPOINT}
+      - HETZNER_S3_BUCKET=${HETZNER_S3_BUCKET}
+      - HETZNER_ACCESS_KEY=${HETZNER_ACCESS_KEY}
+      - HETZNER_SECRET_KEY=${HETZNER_SECRET_KEY}
+      - REMOVEBG_API_KEY=${REMOVEBG_API_KEY}
+    ports:
+      - "3333:3333"
+    volumes:
+      - ./uploads:/app/uploads
+    networks:
+      - raca_forte_network
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3333/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    command: sh -c "npx prisma migrate deploy && node dist/server.js"
+
+  # Redis (opcional, para cache futuro)
+  redis:
+    image: redis:7-alpine
+    container_name: raca_forte_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - racaforte_redis_data:/data
+    networks:
+      - raca_forte_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
+    command: redis-server --appendonly yes
 
 volumes:
   racaforte_mysql_data:
+    driver: local
+  racaforte_redis_data:
+    driver: local
 
 networks:
   raca_forte_network:
