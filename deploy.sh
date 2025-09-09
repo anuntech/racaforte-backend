@@ -64,7 +64,7 @@ else
 fi
 
 # Verificar Backend
-if curl -f http://localhost:3333/health > /dev/null 2>&1; then
+if curl -f http://localhost:3334/health > /dev/null 2>&1; then
     echo "✅ Backend: OK"
 else
     echo "❌ Backend: FALHA"
@@ -84,9 +84,9 @@ docker-compose -f $COMPOSE_FILE ps
 
 echo ""
 echo "🌐 Aplicação disponível em:"
-echo "   Backend: http://localhost:3333"
-echo "   Health Check: http://localhost:3333/health"
-echo "   Documentação: http://localhost:3333/documentation"
+echo "   Backend: http://localhost:3334"
+echo "   Health Check: http://localhost:3334/health"
+echo "   Documentação: http://localhost:3334/documentation"
 echo ""
 echo "📋 Para ver logs:"
 echo "   docker-compose -f $COMPOSE_FILE logs -f"

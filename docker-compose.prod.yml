@@ -50,7 +50,7 @@ services:
       - HETZNER_SECRET_KEY=${HETZNER_SECRET_KEY}
       - REMOVEBG_API_KEY=${REMOVEBG_API_KEY}
     ports:
-      - "3333:3333"
+      - "3334:3333"
     volumes:
       - racaforte_uploads:/app/uploads
     networks:

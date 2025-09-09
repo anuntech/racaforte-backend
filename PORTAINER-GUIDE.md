@@ -159,8 +159,8 @@ Os serviços incluem health checks automáticos:
 
 ### Endpoints de Monitoramento
 
-- **Health Check**: `http://seu-servidor:3333/health`
-- **Documentação API**: `http://seu-servidor:3333/documentation`
+- **Health Check**: `http://seu-servidor:3334/health`
+- **Documentação API**: `http://seu-servidor:3334/documentation`
 
 ## 🔄 Atualizações
 

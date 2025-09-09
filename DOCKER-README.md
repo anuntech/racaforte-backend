@@ -97,7 +97,7 @@ docker-compose -f docker-compose.prod.yml logs -f
    - Health check automático
 
 2. **backend** - API Node.js/Fastify
-   - Porta: `3333`
+   - Porta: `3334:3333` (externa:interna)
    - Build multi-stage (otimizado)
    - Health check: `/health`
    - Auto-restart on failure
@@ -186,7 +186,7 @@ DATABASE_URL=mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE
 
 ```bash
 # Backend
-curl http://localhost:3333/health
+curl http://localhost:3334/health
 
 # MySQL
 docker exec raca_forte_db mysqladmin ping
@@ -269,7 +269,7 @@ docker-compose build --no-cache
 **3. Porta em uso:**
 ```bash
 # Verificar quem usa a porta
-sudo lsof -i :3333
+sudo lsof -i :3334
 
 # Parar containers conflitantes  
 docker-compose down
