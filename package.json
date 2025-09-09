@@ -2,7 +2,6 @@
   "name": "racaforte-backend",
   "version": "1.0.0",
   "description": "Backend para sistema de gerenciamento de peças automotivas com IA integrada",
-  "type": "module",
   "main": "dist/server.js",
   "author": "Equipe Raca Forte",
   "license": "ISC",
