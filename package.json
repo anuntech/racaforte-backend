@@ -21,16 +21,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "prisma:seed": "tsx prisma/seed.ts",
-    "db:reset": "prisma migrate reset --force && npm run prisma:seed",
-    "docker:build": "docker build -t racaforte-backend:latest .",
-    "docker:dev": "docker-compose up -d",
-    "docker:prod": "docker-compose -f docker-compose.prod.yml up -d",
-    "docker:down": "docker-compose down",
-    "docker:down:prod": "docker-compose -f docker-compose.prod.yml down",
-    "docker:logs": "docker-compose logs -f",
-    "docker:logs:prod": "docker-compose -f docker-compose.prod.yml logs -f",
-    "deploy": "./deploy.sh",
-    "deploy:prod": "./deploy.sh prod"
+    "db:reset": "prisma migrate reset --force && npm run prisma:seed"
   },
   "keywords": [
     "fastify",

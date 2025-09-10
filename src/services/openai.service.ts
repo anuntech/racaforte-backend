@@ -306,6 +306,13 @@ async function getPrices(
         throw unwrangleError;
       }
       
+      // Erro 504 do unwrangle indica que não encontrou anúncios
+      if (webscrapingResult.error === 'no_ads_found') {
+        const noAdsError = new Error('Anúncios correspondentes a peça não encontrados');
+        (noAdsError as any).code = 'NO_ADS_FOUND';
+        throw noAdsError;
+      }
+      
       // Outros erros do webscraping
       const webscrapeError = new Error(`Erro no webscraping: ${webscrapingResult.message}`);
       (webscrapeError as any).code = 'WEBSCRAPING_FAILED';

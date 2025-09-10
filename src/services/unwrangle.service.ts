@@ -142,6 +142,14 @@ class UnwrangleService {
             message: 'Rate limit exceeded for Unwrangle API'
           };
         }
+        
+        if (error.response?.status === 504) {
+          return {
+            success: false,
+            error: 'no_ads_found',
+            message: 'Gateway timeout - anúncios correspondentes à peça não encontrados'
+          };
+        }
       }
 
       return {
@@ -154,17 +162,15 @@ class UnwrangleService {
 
   /**
    * Format search term for better results
-   * Combines part name with vehicle information including year
+   * Combines part name with vehicle model and year (without brand)
    */
   formatSearchTerm(partName: string, vehicleBrand?: string, vehicleModel?: string, vehicleYear?: number): string {
     let searchTerm = partName.trim();
     
-    if (vehicleBrand && vehicleModel && vehicleYear) {
-      searchTerm = `${partName} ${vehicleBrand} ${vehicleModel} ${vehicleYear}`;
-    } else if (vehicleBrand && vehicleModel) {
-      searchTerm = `${partName} ${vehicleBrand} ${vehicleModel}`;
-    } else if (vehicleBrand) {
-      searchTerm = `${partName} ${vehicleBrand}`;
+    if (vehicleModel && vehicleYear) {
+      searchTerm = `${partName} ${vehicleModel} ${vehicleYear}`;
+    } else if (vehicleModel) {
+      searchTerm = `${partName} ${vehicleModel}`;
     }
     
     return searchTerm;
@@ -195,3 +201,5 @@ class UnwrangleService {
 
 // Export singleton instance
 export const unwrangleService = new UnwrangleService();
+
+

@@ -1036,7 +1036,7 @@ export async function processPart(
             success: false,
             error: {
               type: 'no_ads_found',
-              message: 'Nenhum anúncio da peça desejada foi encontrado'
+              message: 'Anúncios correspondentes a peça não encontrados'
             }
           });
           

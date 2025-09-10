@@ -26,7 +26,7 @@ export function calculatePricesFromAds(filteredAdsResponse: FilteredAdsResponse)
   
   // Se não há anúncios, lança erro específico
   if (ads.length === 0) {
-    const noAdsError = new Error('Nenhum anúncio da peça desejada foi encontrado');
+    const noAdsError = new Error('Anúncios correspondentes a peça não encontrados');
     (noAdsError as any).code = 'NO_ADS_FOUND';
     throw noAdsError;
   }
